@@ -1,0 +1,53 @@
+name: Publish release image
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-image
+  cancel-in-progress: false
+  queue: max
+
+env:
+  IMAGE: ghcr.io/lucurlings/agent-devstation
+
+jobs:
+  release:
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+      - name: Verify release tag and commit
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          [[ "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Use a full release tag such as v0.1.0' >&2; exit 1; }
+          git fetch origin main
+          git merge-base --is-ancestor HEAD FETCH_HEAD
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Promote the built commit to a full release
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          commit=$(git rev-parse HEAD)
+          docker buildx imagetools inspect --raw "${IMAGE}:nightly-${commit}" \
+            | jq -e '([.manifests[].platform | select(.os == "linux") | .architecture] | sort) == ["amd64", "arm64"]'
+          docker buildx imagetools create \
+            --tag "${IMAGE}:${TAG}" \
+            --tag "${IMAGE}:latest" \
+            "${IMAGE}:nightly-${commit}"
+          docker buildx imagetools inspect --raw "${IMAGE}:${TAG}" \
+            | jq -e '([.manifests[].platform | select(.os == "linux") | .architecture] | sort) == ["amd64", "arm64"]'

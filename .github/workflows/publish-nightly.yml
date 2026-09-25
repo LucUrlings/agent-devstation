@@ -1,8 +1,8 @@
-name: Publish image
+name: Publish nightly image
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -11,13 +11,13 @@ permissions:
 concurrency:
   group: publish-image
   cancel-in-progress: false
+  queue: max
 
 env:
   IMAGE: ghcr.io/lucurlings/agent-devstation
 
 jobs:
   build:
-    if: ${{ !github.event.release.prerelease }}
     strategy:
       fail-fast: false
       matrix:
@@ -32,11 +32,6 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.release.tag_name }}
-          fetch-depth: 0
-      - name: Verify release commit is on main
-        run: git merge-base --is-ancestor HEAD origin/main
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
         with:
@@ -48,26 +43,30 @@ jobs:
           context: .
           platforms: ${{ matrix.platform }}
           push: true
-          tags: ${{ env.IMAGE }}:${{ github.event.release.tag_name }}-${{ matrix.arch }}
+          tags: ${{ env.IMAGE }}:nightly-${{ github.sha }}-${{ matrix.arch }}
 
   manifest:
     needs: build
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Publish and verify multi-platform tags
-        env:
-          TAG: ${{ github.event.release.tag_name }}
+      - name: Publish and verify nightly multi-platform tags
         run: |
           docker buildx imagetools create \
-            --tag "${IMAGE}:${TAG}" \
-            --tag "${IMAGE}:latest" \
-            "${IMAGE}:${TAG}-amd64" \
-            "${IMAGE}:${TAG}-arm64"
-          docker buildx imagetools inspect --raw "${IMAGE}:${TAG}" \
+            --tag "${IMAGE}:nightly-${GITHUB_SHA}" \
+            "${IMAGE}:nightly-${GITHUB_SHA}-amd64" \
+            "${IMAGE}:nightly-${GITHUB_SHA}-arm64"
+          docker buildx imagetools inspect --raw "${IMAGE}:nightly-${GITHUB_SHA}" \
             | jq -e '([.manifests[].platform | select(.os == "linux") | .architecture] | sort) == ["amd64", "arm64"]'
+          main_sha=$(git ls-remote origin refs/heads/main | awk '{print $1}')
+          if [[ "${main_sha}" == "${GITHUB_SHA}" ]]; then
+            docker buildx imagetools create \
+              --tag "${IMAGE}:nightly-latest" \
+              "${IMAGE}:nightly-${GITHUB_SHA}"
+          fi
