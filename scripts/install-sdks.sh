@@ -5,6 +5,10 @@ set -euo pipefail
 # keeps this layer, so matching installs are reused without a network request.
 sdk_root=/opt/sdk
 
+fetch() {
+  curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 "$@"
+}
+
 valid_version() {
   [[ "$1" =~ ^[0-9]+(\.[0-9]+){0,2}(\.x)?$ ]]
 }
@@ -47,18 +51,20 @@ install_python() {
 
 install_node() {
   local version arch
-  version=$(curl -fsSL https://nodejs.org/dist/index.json | jq -r --arg p "$(requested_prefix "$1")" '[.[].version | ltrimstr("v") | select(. == $p or startswith($p + "."))][0] // empty')
+  version=$(fetch https://nodejs.org/dist/index.json | jq -r --arg p "$(requested_prefix "$1")" '[.[].version | ltrimstr("v") | select(. == $p or startswith($p + "."))][0] // empty')
   [[ -n "$version" ]] || { echo "No Node.js release matches $1" >&2; return 1; }
   arch=$(dpkg --print-architecture)
   [[ "$arch" == amd64 ]] && arch=x64
   mkdir -p "$sdk_root/node/$version"
-  curl -fsSL "https://nodejs.org/dist/v${version}/node-v${version}-linux-${arch}.tar.xz" | tar -xJ --strip-components=1 -C "$sdk_root/node/$version"
+  fetch "https://nodejs.org/dist/v${version}/node-v${version}-linux-${arch}.tar.xz" -o /tmp/devstation-node.tar.xz
+  tar -xJf /tmp/devstation-node.tar.xz --strip-components=1 -C "$sdk_root/node/$version"
+  rm /tmp/devstation-node.tar.xz
   ln -s "$version" "$sdk_root/node/current"
 }
 
 install_dotnet() {
   local version=$1
-  curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+  fetch https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
   mkdir -p "$sdk_root/dotnet/current"
   if [[ "$version" =~ ^[0-9]+(\.[0-9]+)?(\.x)?$ ]]; then
     local channel
@@ -78,23 +84,27 @@ install_java() {
   [[ "$arch" == amd64 ]] && arch=x64
   [[ "$arch" == arm64 ]] && arch=aarch64
   mkdir -p "$sdk_root/java/$1"
-  curl -fsSL "https://api.adoptium.net/v3/binary/latest/${major}/ga/linux/${arch}/jdk/hotspot/normal/eclipse" | tar -xz --strip-components=1 -C "$sdk_root/java/$1"
+  fetch "https://api.adoptium.net/v3/binary/latest/${major}/ga/linux/${arch}/jdk/hotspot/normal/eclipse" -o /tmp/devstation-java.tar.gz
+  tar -xzf /tmp/devstation-java.tar.gz --strip-components=1 -C "$sdk_root/java/$1"
+  rm /tmp/devstation-java.tar.gz
   ln -s "$1" "$sdk_root/java/current"
 }
 
 install_go() {
   local version arch
-  version=$(curl -fsSL 'https://go.dev/dl/?mode=json&include=all' | jq -r --arg p "$(requested_prefix "$1")" '[.[].version | ltrimstr("go") | select(. == $p or startswith($p + "."))][0] // empty')
+  version=$(fetch 'https://go.dev/dl/?mode=json&include=all' | jq -r --arg p "$(requested_prefix "$1")" '[.[].version | ltrimstr("go") | select(. == $p or startswith($p + "."))][0] // empty')
   [[ -n "$version" ]] || { echo "No Go release matches $1" >&2; return 1; }
   arch=$(dpkg --print-architecture)
   mkdir -p "$sdk_root/go/$version"
-  curl -fsSL "https://go.dev/dl/go${version}.linux-${arch}.tar.gz" | tar -xz --strip-components=1 -C "$sdk_root/go/$version"
+  fetch "https://go.dev/dl/go${version}.linux-${arch}.tar.gz" -o /tmp/devstation-go.tar.gz
+  tar -xzf /tmp/devstation-go.tar.gz --strip-components=1 -C "$sdk_root/go/$version"
+  rm /tmp/devstation-go.tar.gz
   ln -s "$version" "$sdk_root/go/current"
 }
 
 install_rust() {
   mkdir -p "$CARGO_HOME" "$RUSTUP_HOME"
-  curl -fsSL https://sh.rustup.rs -o /tmp/rustup-init.sh
+  fetch https://sh.rustup.rs -o /tmp/rustup-init.sh
   HOME=/root sh /tmp/rustup-init.sh -y --no-modify-path --profile default --default-toolchain "$(requested_prefix "$1")"
   rm /tmp/rustup-init.sh
 }
