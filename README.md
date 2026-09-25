@@ -1,3 +1,5 @@
+![Two luminous agents sharing a development workspace](assets/readme-banner.png)
+
 # Agent Devstation
 
 A ready-to-run Docker development station for multiple projects. The Linux image includes **Codex**, **Claude Code**, and an optional browser editor (code-server). Select Python, Node.js, .NET, Java, Go, and Rust SDK versions through Compose. All tools see the same `/workspaces` tree and global SDK paths.
@@ -130,6 +132,16 @@ Use a release tag instead of `latest` for a fixed image. To update, change the t
 If startup fails, inspect `docker compose logs devstation`. Check version syntax, upstream availability, outbound HTTPS, and disk space. If an SDK change appears ignored, inspect `docker compose config` and run `up -d` rather than `restart`. On Linux, check `DEV_UID`/`DEV_GID` and host bind mount ownership if writes fail. If Codex device login fails, check its account setting. For Claude Remote Control, run `claude doctor` and check subscription login, organization policy, project trust, API endpoint, and conflicting API variables. For editor issues, test loopback access before checking DNS, TLS, and authentication.
 
 This is a development container, not an isolation boundary for hostile code. Agent commands and editor terminals can read mounted projects and home credentials, install packages, and reach the network. Do not mount host secrets or the Docker socket. Use a dedicated host or VM for untrusted repositories.
+
+## Star history
+
+<a href="https://www.star-history.com/?repos=LucUrlings%2Fagent-devstation&type=date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=LucUrlings/agent-devstation&type=date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=LucUrlings/agent-devstation&type=date" />
+    <img alt="Agent Devstation GitHub star history" src="https://api.star-history.com/chart?repos=LucUrlings/agent-devstation&type=date" />
+  </picture>
+</a>
 
 ## Project policy
 
