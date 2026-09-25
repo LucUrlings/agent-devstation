@@ -28,9 +28,14 @@ mkdir -p /home/dev/.codex /home/dev/.claude /home/dev/.local/share/code-server /
 chown dev:dev /home/dev /home/dev/.codex /home/dev/.claude /home/dev/.local /home/dev/.local/share
 chown -R dev:dev /home/dev/.local/share/code-server
 
-/usr/local/lib/agent-devstation/install-sdks.sh
+# Installers run as root, but HOME belongs to dev in normal sessions. Keep
+# installer caches out of the persisted dev home.
+HOME=/root /usr/local/lib/agent-devstation/install-sdks.sh
 if [[ "$(stat -c %u:%g /opt/sdk)" != "$(id -u dev):$(id -g dev)" ]]; then
   chown -R dev:dev /opt/sdk
+fi
+if [[ -d /home/dev/.cache && "$(stat -c %u:%g /home/dev/.cache)" != "$(id -u dev):$(id -g dev)" ]]; then
+  chown -R dev:dev /home/dev/.cache
 fi
 
 if [[ $# -gt 0 ]]; then

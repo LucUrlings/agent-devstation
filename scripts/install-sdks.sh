@@ -27,12 +27,18 @@ installed_version() {
   local name=$1
   [[ -e "$sdk_root/$name/current" ]] || return 1
   case "$name" in
-    python) "$sdk_root/python/current/bin/python3" -c 'import platform; print(platform.python_version())' ;;
-    node) "$sdk_root/node/current/bin/node" --version | sed 's/^v//' ;;
-    dotnet) "$sdk_root/dotnet/current/dotnet" --version ;;
-    java) "$sdk_root/java/current/bin/java" -version 2>&1 | sed -nE '1s/.*version "([0-9.]+).*/\1/p' ;;
-    go) "$sdk_root/go/current/bin/go" version | sed -nE 's/.* go([0-9.]+) .*/\1/p' ;;
-    rust) "$sdk_root/rust/current/bin/rustc" --version | awk '{print $2}' ;;
+    python) [[ -x "$sdk_root/python/current/bin/python3" && -x "$sdk_root/python/current/bin/pip3" ]] || return 1
+      "$sdk_root/python/current/bin/python3" -c 'import platform; print(platform.python_version())' ;;
+    node) [[ -x "$sdk_root/node/current/bin/node" && -x "$sdk_root/node/current/bin/npm" && -x "$sdk_root/node/current/bin/npx" && -x "$sdk_root/node/current/bin/corepack" ]] || return 1
+      "$sdk_root/node/current/bin/node" --version | sed 's/^v//' ;;
+    dotnet) [[ -x "$sdk_root/dotnet/current/dotnet" ]] || return 1
+      "$sdk_root/dotnet/current/dotnet" --version ;;
+    java) [[ -x "$sdk_root/java/current/bin/java" && -x "$sdk_root/java/current/bin/javac" ]] || return 1
+      "$sdk_root/java/current/bin/java" -version 2>&1 | sed -nE '1s/.*version "([0-9.]+).*/\1/p' ;;
+    go) [[ -x "$sdk_root/go/current/bin/go" && -x "$sdk_root/go/current/bin/gofmt" ]] || return 1
+      "$sdk_root/go/current/bin/go" version | sed -nE 's/.* go([0-9.]+) .*/\1/p' ;;
+    rust) [[ -x "$sdk_root/rust/current/bin/rustc" && -x "$sdk_root/rust/current/bin/cargo" && -x "$sdk_root/rust/current/bin/rustup" ]] || return 1
+      "$sdk_root/rust/current/bin/rustc" --version | awk '{print $2}' ;;
   esac
 }
 
@@ -133,9 +139,13 @@ for name in python node dotnet java go rust; do
     echo "$name $current already installed"
     continue
   fi
-  if [[ -e "$sdk_root/$name/current" ]]; then
-    echo "Installed $name version $current does not match $version; recreate the container" >&2
-    exit 2
+  if [[ -e "$sdk_root/$name/current" || -L "$sdk_root/$name/current" ]]; then
+    if [[ -n "$current" ]]; then
+      echo "Installed $name version $current does not match $version; recreate the container" >&2
+      exit 2
+    fi
+    echo "Removing incomplete $name installation"
+    rm -rf -- "$sdk_root/$name/current"
   fi
   echo "Installing $name $version"
   "install_$name" "$version"
