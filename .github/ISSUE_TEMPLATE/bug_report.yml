@@ -1,0 +1,27 @@
+name: Bug report
+description: Report a reproducible Agent Devstation problem
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe expected and actual behavior. Remove secrets from logs.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Host OS and CPU architecture
+    validations:
+      required: true
+  - type: textarea
+    id: configuration
+    attributes:
+      label: Image tag and SDK selections
+      description: Do not include API keys, passwords, or login files.
