@@ -50,6 +50,7 @@ install_node() {
   version=$(curl -fsSL https://nodejs.org/dist/index.json | jq -r --arg p "$(requested_prefix "$1")" '[.[].version | ltrimstr("v") | select(. == $p or startswith($p + "."))][0] // empty')
   [[ -n "$version" ]] || { echo "No Node.js release matches $1" >&2; return 1; }
   arch=$(dpkg --print-architecture)
+  [[ "$arch" == amd64 ]] && arch=x64
   mkdir -p "$sdk_root/node/$version"
   curl -fsSL "https://nodejs.org/dist/v${version}/node-v${version}-linux-${arch}.tar.xz" | tar -xJ --strip-components=1 -C "$sdk_root/node/$version"
   ln -s "$version" "$sdk_root/node/current"
