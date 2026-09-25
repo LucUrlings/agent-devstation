@@ -4,13 +4,13 @@
 
 A ready-to-run Docker development station for multiple projects. The Linux image includes **Codex**, **Claude Code**, and an optional browser editor (code-server). Select Python, Node.js, .NET, Java, Go, and Rust SDK versions through Compose. All tools see the same `/workspaces` tree and global SDK paths.
 
-The publishing workflow builds `linux/amd64` and `linux/arm64` images at `ghcr.io/lucurlings/agent-devstation`. Merges to `main` publish `nightly-latest`; full GitHub releases publish `latest` and a version tag. Users only pull images—no local build is part of setup.
+The publishing workflows build `linux/amd64` and `linux/arm64` images at `ghcr.io/lucurlings/agent-devstation`. Merges to `main` publish `nightly-latest`; full GitHub releases publish `latest` and a version tag. Users only pull images—no local build is part of setup.
 
 ## Quick start
 
 1. Install Docker Engine or Docker Desktop with Compose.
 2. Download [`compose.yaml`](compose.yaml) and [`sample.env`](sample.env) into one directory. Rename `sample.env` to `.env` and edit SDK versions.
-3. Start the latest full release. Until the first release, set `DEVSTATION_TAG=nightly-latest` in `.env` to try the build from `main`:
+3. Start the latest full release:
 
    ```sh
    mkdir -p workspaces
@@ -37,7 +37,7 @@ There is no agent selector in Compose. Use `docker compose exec -u dev devstatio
 | `nightly-latest` | Newest successful merge to `main`; opt in with `DEVSTATION_TAG=nightly-latest`. |
 | `nightly-<commit SHA>` | The exact image from a `main` commit. |
 
-Each `main` push builds both architectures in parallel and publishes the nightly tags only after both builds succeed. A non-prerelease GitHub release with a tag such as `v0.1.0` must point to a commit on `main`; it promotes that commit's already built multi-platform image to the version tag and `latest` without rebuilding. Wait for the `Publish image` workflow on `main` to finish before creating the release. `latest` does not move on ordinary merges.
+The `Publish nightly image` workflow builds both architectures in parallel on each `main` push and publishes the nightly tags only after both builds succeed. The separate `Publish release image` workflow runs when a full GitHub release is published. Its tag, such as `v0.1.0`, must point to a commit on `main`; it promotes that commit's already built multi-platform image to the version tag and `latest` without rebuilding. Wait for the nightly workflow on `main` to finish before creating the release. `latest` does not move on ordinary merges.
 
 The first GHCR package may need its visibility changed to **Public** before anonymous `docker compose pull` works. After the first nightly publish, open your GitHub profile's **Packages → agent-devstation → Package settings → Change visibility**, then test an unauthenticated pull. Public image access does not grant access to agent logins or project files.
 
