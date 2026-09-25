@@ -1,5 +1,7 @@
 FROM ubuntu:24.04
 
+LABEL org.opencontainers.image.source="https://github.com/LucUrlings/agent-devstation"
+
 ARG TARGETARCH
 ARG CODE_SERVER_VERSION=4.138.0
 

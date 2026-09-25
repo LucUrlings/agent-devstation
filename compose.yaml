@@ -1,6 +1,6 @@
 services:
   devstation:
-    image: ghcr.io/lucurlings/agent-devstation:latest
+    image: ghcr.io/lucurlings/agent-devstation:${DEVSTATION_TAG:-latest}
     init: true
     stdin_open: true
     tty: true

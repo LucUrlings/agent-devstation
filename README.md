@@ -4,13 +4,13 @@
 
 A ready-to-run Docker development station for multiple projects. The Linux image includes **Codex**, **Claude Code**, and an optional browser editor (code-server). Select Python, Node.js, .NET, Java, Go, and Rust SDK versions through Compose. All tools see the same `/workspaces` tree and global SDK paths.
 
-The release workflow publishes `linux/amd64` and `linux/arm64` images at `ghcr.io/lucurlings/agent-devstation`. No local build is part of setup. The GHCR tag will become available after the first release.
+The publishing workflow builds `linux/amd64` and `linux/arm64` images at `ghcr.io/lucurlings/agent-devstation`. Merges to `main` publish `nightly-latest`; full GitHub releases publish `latest` and a version tag. Users only pull images—no local build is part of setup.
 
 ## Quick start
 
 1. Install Docker Engine or Docker Desktop with Compose.
 2. Download [`compose.yaml`](compose.yaml) and [`sample.env`](sample.env) into one directory. Rename `sample.env` to `.env` and edit SDK versions.
-3. Start the published image:
+3. Start the latest full release. Until the first release, set `DEVSTATION_TAG=nightly-latest` in `.env` to try the build from `main`:
 
    ```sh
    mkdir -p workspaces
@@ -28,6 +28,19 @@ The release workflow publishes `linux/amd64` and `linux/arm64` images at `ghcr.i
 
 There is no agent selector in Compose. Use `docker compose exec -u dev devstation bash` for a shell. Each project is a directory under the one mounted `workspaces/` tree.
 
+## Image tags and releases
+
+| Tag | Meaning |
+| --- | --- |
+| `latest` | Newest full release; Compose default. |
+| `v0.1.0` (example) | A fixed full release. |
+| `nightly-latest` | Newest successful merge to `main`; opt in with `DEVSTATION_TAG=nightly-latest`. |
+| `nightly-<commit SHA>` | The exact image from a `main` commit. |
+
+Each `main` push builds both architectures in parallel and publishes the nightly tags only after both builds succeed. A non-prerelease GitHub release with a tag such as `v0.1.0` must point to a commit on `main`; it promotes that commit's already built multi-platform image to the version tag and `latest` without rebuilding. Wait for the `Publish image` workflow on `main` to finish before creating the release. `latest` does not move on ordinary merges.
+
+The first GHCR package may need its visibility changed to **Public** before anonymous `docker compose pull` works. After the first nightly publish, open your GitHub profile's **Packages → agent-devstation → Package settings → Change visibility**, then test an unauthenticated pull. Public image access does not grant access to agent logins or project files.
+
 ## Complete Compose configuration
 
 The included [`compose.yaml`](compose.yaml) has **no `build:` instruction**. It mounts `./workspaces` for project files and a Docker named volume for `/home/dev`, including both agents' login state and editor settings. The editor is disabled by default.
@@ -35,7 +48,7 @@ The included [`compose.yaml`](compose.yaml) has **no `build:` instruction**. It 
 ```yaml
 services:
   devstation:
-    image: ghcr.io/lucurlings/agent-devstation:latest
+    image: ghcr.io/lucurlings/agent-devstation:${DEVSTATION_TAG:-latest}
     init: true
     stdin_open: true
     tty: true
@@ -127,7 +140,7 @@ For remote access, connect your own reverse proxy to the editor on **container p
 
 ## Updates, troubleshooting, and security
 
-Use a release tag instead of `latest` for a fixed image. To update, change the tag, run `docker compose pull`, then `docker compose up -d`. A new image recreates the container and reinstalls the selected SDKs. Back up both the named home volume and `workspaces/`. Partial SDK versions resolve again at recreation.
+Set `DEVSTATION_TAG` to a version tag for a fixed release, or leave it unset to follow `latest`. To update, change the tag if needed, run `docker compose pull`, then `docker compose up -d`. A new image recreates the container and reinstalls the selected SDKs. Back up both the named home volume and `workspaces/`. Partial SDK versions resolve again at recreation.
 
 If startup fails, inspect `docker compose logs devstation`. Check version syntax, upstream availability, outbound HTTPS, and disk space. If an SDK change appears ignored, inspect `docker compose config` and run `up -d` rather than `restart`. On Linux, check `DEV_UID`/`DEV_GID` and host bind mount ownership if writes fail. If Codex device login fails, check its account setting. For Claude Remote Control, run `claude doctor` and check subscription login, organization policy, project trust, API endpoint, and conflicting API variables. For editor issues, test loopback access before checking DNS, TLS, and authentication.
 
@@ -147,4 +160,4 @@ This is a development container, not an isolation boundary for hostile code. Age
 
 Original project code is [Apache 2.0 licensed](LICENSE). The image installs separately licensed upstream tools. We took inspiration from the use case in `icoretech/codex-docker` but did not copy its Dockerfile or scripts. See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-Protect `main` with the [documented repository ruleset](docs/repository-settings.md): require pull requests, passing CI checks, and resolved conversations; block force pushes and deletion. Require another approving reviewer only when a second trusted maintainer exists, so a solo maintainer can merge reviewed changes. Fork PR checks have read-only `contents` permission and no publication credentials. CI builds AMD64 and ARM64 concurrently on native runners. For a non-prerelease release, the workflow checks that the tag's commit is on `main`, builds both architectures in parallel, then publishes the combined GHCR tags after both succeed.
+Protect `main` with the [documented repository ruleset](docs/repository-settings.md): require pull requests, passing CI checks, and resolved conversations; block force pushes and deletion. Require another approving reviewer only when a second trusted maintainer exists, so a solo maintainer can merge reviewed changes. Fork PR checks have read-only `contents` permission and no publication credentials. CI builds AMD64 and ARM64 concurrently on native runners. Trusted `main` pushes publish nightly tags; a full release promotes an already built commit to the version tag and `latest`.
