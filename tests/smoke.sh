@@ -9,6 +9,26 @@ codex_name="devstation-codex-smoke-$$"
 codex_volume="devstation-codex-home-smoke-$$"
 workspace_volume="devstation-workspace-smoke-$$"
 trap 'docker rm -f "$name" "$java_name" "$codex_name" >/dev/null 2>&1 || true; docker volume rm "$cache_volume" "$codex_volume" "$workspace_volume" >/dev/null 2>&1 || true' EXIT
+trap 'echo "Smoke test failed at line $LINENO" >&2' ERR
+
+wait_for_editor() {
+  local editor_ready=false
+  for _ in $(seq 1 180); do
+    if docker exec -u dev "$name" curl -s --max-time 2 -o /dev/null http://127.0.0.1:8080/; then
+      editor_ready=true
+      break
+    fi
+    if [[ $(docker inspect -f '{{.State.Running}}' "$name") != true ]]; then
+      docker logs "$name"
+      return 1
+    fi
+    sleep 2
+  done
+  if [[ "$editor_ready" != true ]]; then
+    docker logs "$name"
+    return 1
+  fi
+}
 
 bash tests/codex-wrapper.sh
 
@@ -92,7 +112,7 @@ for generation in 1 2; do
       done
       exit 1
     '
-    docker logs "$codex_name" 2>&1 | grep -q 'Resuming Codex Remote Control'
+    docker logs "$codex_name" 2>&1 | grep 'Resuming Codex Remote Control' >/dev/null
   fi
   docker rm -f "$codex_name" >/dev/null
 done
@@ -133,14 +153,9 @@ for _ in $(seq 1 180); do
 done
 [[ "$ready" == true ]] || { docker logs "$name"; exit 1; }
 
-editor_ready=false
-for _ in $(seq 1 180); do
-  if docker exec -u dev "$name" curl -s --max-time 2 -o /dev/null http://127.0.0.1:8080/; then editor_ready=true; break; fi
-  if [[ $(docker inspect -f '{{.State.Running}}' "$name") != true ]]; then docker logs "$name"; exit 1; fi
-  sleep 2
-done
-[[ "$editor_ready" == true ]] || { docker logs "$name"; exit 1; }
+wait_for_editor
 
+echo 'Checking SDK commands and editor login'
 docker exec -u dev "$name" bash -lc 'python3 --version && node --version && dotnet --version && java -version && go version && rustc --version && cargo --version && test "$JAVA_HOME" = /opt/sdk/java/current && test "$DOTNET_ROOT" = /opt/sdk/dotnet/current'
 docker exec -u dev "$name" code-server --version
 docker exec -i -u dev -e DOTNET_CLI_TELEMETRY_OPTOUT=1 "$name" bash -s < tests/sdk-functional.sh
@@ -151,8 +166,9 @@ docker exec -u dev "$name" bash -lc 'curl -s -c /tmp/editor-cookie -o /dev/null 
 # editor installation. Startup must clear them without downloading again.
 docker exec -u root "$name" mkdir -p /opt/.agent-devstation-code-server-staging
 before=$(docker logs "$name" 2>&1 | grep -c '^Installing ')
+echo 'Restarting with installed SDKs and editor'
 docker restart "$name" >/dev/null
-sleep 5
+wait_for_editor
 after=$(docker logs "$name" 2>&1 | grep -c '^Installing ')
 [[ "$before" == "$after" ]] || { echo 'Restart downloaded an SDK or editor again' >&2; exit 1; }
 docker exec -u dev "$name" test ! -e /opt/.agent-devstation-code-server-staging
