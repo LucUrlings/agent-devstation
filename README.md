@@ -2,7 +2,7 @@
 
 # Agent Devstation
 
-A ready-to-run Docker development station for multiple projects. The Linux image includes **Codex**, **Claude Code**, **GitHub CLI (`gh`)**, and an optional browser editor (code-server). Select Python, Node.js, .NET, Java, Go, and Rust SDK versions through Compose. All tools see the same `/workspaces` tree and global SDK paths.
+A ready-to-run Docker development station for multiple projects. The Ubuntu 26.04 LTS image includes **Codex**, **Claude Code**, **GitHub CLI (`gh`)**, and an optional browser editor (code-server). Select Python, Node.js, .NET, Java, Go, and Rust SDK versions through Compose. All tools see the same `/workspaces` tree and global SDK paths.
 
 The publishing workflows build `linux/amd64` and `linux/arm64` images at `ghcr.io/lucurlings/agent-devstation`. Successful merges to `main` publish `nightly`; full GitHub releases publish `latest` and a version tag. Users only pull images—no local build is part of setup.
 
