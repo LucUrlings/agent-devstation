@@ -30,6 +30,22 @@ wait_for_editor() {
   fi
 }
 
+wait_for_writable_node() {
+  for _ in $(seq 1 60); do
+    # npm can run before the entrypoint finishes giving dev write access.
+    if docker exec -u dev "$name" bash -c 'npm --version >/dev/null && test -w /opt/sdk/node/current/bin && test -w /opt/sdk/node/current/lib/node_modules' >/dev/null 2>&1; then
+      return 0
+    fi
+    if [[ $(docker inspect -f '{{.State.Running}}' "$name") != true ]]; then
+      docker logs "$name"
+      return 1
+    fi
+    sleep 2
+  done
+  docker logs "$name"
+  return 1
+}
+
 bash tests/codex-wrapper.sh
 
 # ChatGPT Remote's iOS folder picker resolves $HOME through an explicit
@@ -179,29 +195,16 @@ docker logs "$name" 2>&1 | grep '^Found code-server .*; already installed$' >/de
 # next start must repair it instead of entering a permanent restart loop.
 docker exec -u root "$name" mv /opt/sdk/node/current/bin/npm /opt/sdk/node/current/bin/npm.incomplete
 docker restart "$name" >/dev/null
-recovered=false
-for _ in $(seq 1 60); do
-  if docker exec -u dev "$name" npm --version >/dev/null 2>&1; then recovered=true; break; fi
-  if [[ $(docker inspect -f '{{.State.Running}}' "$name") != true ]]; then docker logs "$name"; exit 1; fi
-  sleep 2
-done
-[[ "$recovered" == true ]] || { docker logs "$name"; exit 1; }
+wait_for_writable_node
 docker logs "$name" 2>&1 | grep '^Removing incomplete node installation$' >/dev/null
 
 # An interrupted install can also leave a version directory before the
 # current link is created. Startup must clear that partial directory.
 docker exec -u root "$name" rm /opt/sdk/node/current
 docker restart "$name" >/dev/null
-recovered=false
-for _ in $(seq 1 60); do
-  if docker exec -u dev "$name" npm --version >/dev/null 2>&1; then recovered=true; break; fi
-  if [[ $(docker inspect -f '{{.State.Running}}' "$name") != true ]]; then docker logs "$name"; exit 1; fi
-  sleep 2
-done
-[[ "$recovered" == true ]] || { docker logs "$name"; exit 1; }
+wait_for_writable_node
 repairs=$(docker logs "$name" 2>&1 | grep -c '^Removing incomplete node installation$')
 [[ "$repairs" -ge 2 ]] || { echo 'Missing-current recovery did not clear the partial SDK' >&2; exit 1; }
-docker exec -u dev "$name" bash -lc 'test -w /opt/sdk/node/current/bin && test -w /opt/sdk/node/current/lib/node_modules'
 
 # Go can still report its version when extraction stopped before its source
 # tree was complete. Without the completion marker, startup must reinstall it.
