@@ -48,10 +48,10 @@ wait_for_writable_node() {
 
 bash tests/codex-wrapper.sh
 
-# ChatGPT Remote's iOS folder picker resolves $HOME through an explicit
-# read-only Codex sandbox. Docker's default seccomp policy blocks bubblewrap
-# before the directory can be checked; use the same options as Compose.
-test "$(docker compose config --format json | jq -r '.services["agent-devstation"].security_opt | join(",")')" = 'seccomp=unconfined,apparmor=unconfined'
+# The simple Compose path retains Docker's default security filters. The
+# optional sandboxed path needs the options below; test that path separately.
+test "$(docker compose config --format json | jq -r '.services["agent-devstation"].security_opt // [] | length')" = 0
+docker run --rm "$image" bash -lc 'test -x /usr/bin/bwrap'
 test "$(docker run --rm --security-opt seccomp=unconfined --security-opt apparmor=unconfined "$image" \
   codex sandbox -c 'sandbox_mode="read-only"' /bin/sh -lc 'cd "$HOME" && pwd -P')" = /home/dev
 if docker run --rm --security-opt seccomp=unconfined --security-opt apparmor=unconfined "$image" \

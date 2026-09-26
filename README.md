@@ -24,11 +24,13 @@ A ready-to-run Docker workspace with **Codex**, **Claude Code**, and **GitHub CL
 
    ```sh
    docker compose exec -u dev agent-devstation git clone https://github.com/you/project.git /workspaces/project
-   docker compose exec -u dev -w /workspaces/project agent-devstation codex
+   docker compose exec -u dev -w /workspaces/project agent-devstation codex --no-daemon --sandbox danger-full-access
    docker compose exec -u dev -w /workspaces/project agent-devstation claude
    ```
 
 Use `docker compose exec -u dev agent-devstation bash` for a shell. [Authentication options](docs/guide.md#authentication) include ChatGPT or an OpenAI API key for Codex, and a Claude subscription or Anthropic API key for Claude Code. Agent login state persists in the named `/home/dev` volume; projects live in the `./workspaces` bind mount.
+
+The quick-start Codex command skips Codex's inner sandbox, so it can access everything the `dev` user can access inside the container. It works without host namespace setup, but it does not run the background server used by phone Remote Control. To use Codex's normal sandbox and Remote Control, follow the [sandboxed setup](docs/guide.md#codex-sandboxed-setup). [OpenAI explains the permission modes](https://learn.chatgpt.com/docs/sandboxing?surface=cli#how-permissions-work).
 
 ## Configure
 
@@ -47,11 +49,11 @@ An empty value disables an SDK, including either default. A partial version sele
 
 Set `AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=true` and `AGENT_DEVSTATION_VSCODE_PASSWORD` to enable code-server on **container port 8080**. Uncomment the loopback port mapping in Compose for local browser access. For remote access, use your own reverse proxy with TLS and authentication. The editor shares `/workspaces` and the SDKs; disabling it removes its installation. [Editor setup](docs/guide.md#browser-editor).
 
-On Linux, set `AGENT_DEVSTATION_UID` and `AGENT_DEVSTATION_GID` if your project files are owned by IDs other than `1000:1000`. The image includes `bubblewrap`; no host install is normally needed. If the Codex sandbox or phone folder picker reports a namespace error, follow the [host check](docs/guide.md#codex-linux-sandbox-host-check). The Compose file uses `seccomp=unconfined` so Codex's sandbox can run; this disables Docker's seccomp filter for the container. See the [security boundary](docs/guide.md#complete-compose-configuration).
+On Linux, set `AGENT_DEVSTATION_UID` and `AGENT_DEVSTATION_GID` if your project files are owned by IDs other than `1000:1000`. The image includes Ubuntu's `bubblewrap` package for the optional sandboxed path; no separate host `bubblewrap` install is normally needed. The default Compose file keeps Docker's security filters. [Host checks and security details](docs/guide.md#codex-sandboxed-setup).
 
 ## Phone Remote Control
 
-Both agents use their **official outbound** Remote Control workflows; neither needs a public agent port. Codex requires a ChatGPT login. Its CLI pairing command is experimental, and OpenAI's general mobile setup guide still describes desktop-app pairing, so headless phone pairing needs an account-based check. Claude Code Remote Control requires an eligible Claude subscription login; an API key alone cannot enable it. See the [commands and current limitations](docs/guide.md#official-phone-remote-control).
+Both agents use their **official outbound** Remote Control workflows; neither needs a public agent port. Codex phone control requires the [sandboxed setup](docs/guide.md#codex-sandboxed-setup) and a ChatGPT login. Its CLI pairing command is experimental, and OpenAI's general mobile setup guide still describes desktop-app pairing, so headless phone pairing needs an account-based check. Claude Code Remote Control requires an eligible Claude subscription login; an API key alone cannot enable it. See the [commands and current limitations](docs/guide.md#official-phone-remote-control).
 
 ## Updates and security
 

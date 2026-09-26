@@ -3,11 +3,11 @@ services:
     image: ghcr.io/lucurlings/agent-devstation:${AGENT_DEVSTATION_TAG:-latest}
     pull_policy: always
     init: true
-    # Codex's Linux sandbox needs namespace and mount syscalls.
-    # This removes Docker's seccomp filter for this container.
-    security_opt:
-      - seccomp=unconfined
-      - apparmor=unconfined
+    # To use Codex's Linux sandbox and phone Remote Control, follow the
+    # sandboxed setup in docs/guide.md and uncomment these options.
+    # security_opt:
+    #   - seccomp=unconfined
+    #   - apparmor=unconfined
     environment:
       AGENT_DEVSTATION_SDK_PYTHON: ${AGENT_DEVSTATION_SDK_PYTHON-3.14}
       AGENT_DEVSTATION_SDK_NODE: ${AGENT_DEVSTATION_SDK_NODE-24}
