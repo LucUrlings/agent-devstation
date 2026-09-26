@@ -48,6 +48,15 @@ sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
 
 Repeat the sandbox check afterward. On Ubuntu 26.04, the profile ships with `apparmor` at `/etc/apparmor.d/bwrap-userns-restrict`; load it there if needed. Debian and Fedora may use different host rules. [OpenAI's Linux prerequisites](https://learn.chatgpt.com/docs/sandboxing?surface=cli#prerequisites) explain the host requirements. The image cannot override a host namespace restriction.
 
+To undo these Ubuntu 24.04 profile steps **if that profile file did not exist before you copied it**, remove the loaded profile first, then the file:
+
+```sh
+sudo apparmor_parser -R /etc/apparmor.d/bwrap-userns-restrict
+sudo rm /etc/apparmor.d/bwrap-userns-restrict
+```
+
+`apt update` needs no rollback. Remove `apparmor-profiles` and `apparmor-utils` with `sudo apt remove apparmor-profiles apparmor-utils` only if you installed them solely for this and do not use them elsewhere. Removing the profile can make Codex's sandbox fail again on that host.
+
 ## SDK selection
 
 Compose defaults to Python `3.14` and Node.js `24`; .NET, Java, Go, and Rust are off. Set the `AGENT_DEVSTATION_SDK_*` variables in an optional ignored `.env` beside Compose. An empty value turns that SDK off. An unset variable when running the image directly selects none.
