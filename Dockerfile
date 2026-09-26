@@ -47,6 +47,8 @@ RUN install -d -m 0755 /etc/apt/keyrings \
     && claude --version
 
 # Official standalone Codex release. The installer is executed only at image build time.
+# Ubuntu's host AppArmor profile grants user namespaces to /usr/bin/bwrap, so
+# place Codex's bundled helper at that path for Ubuntu host compatibility.
 ARG CODEX_VERSION=latest
 RUN curl -fsSL https://chatgpt.com/codex/install.sh -o /tmp/install-codex.sh \
     && HOME=/root CODEX_HOME=/opt/codex sh /tmp/install-codex.sh --release "$CODEX_VERSION" \
@@ -55,7 +57,9 @@ RUN curl -fsSL https://chatgpt.com/codex/install.sh -o /tmp/install-codex.sh \
     && rm /tmp/install-codex.sh \
     && installed=$(/opt/codex/packages/standalone/current/bin/codex --version) \
     && echo "$installed" \
-    && { [ "$CODEX_VERSION" = latest ] || [ "$installed" = "codex-cli $CODEX_VERSION" ]; }
+    && { [ "$CODEX_VERSION" = latest ] || [ "$installed" = "codex-cli $CODEX_VERSION" ]; } \
+    && install -m 0755 /opt/codex/packages/standalone/current/codex-resources/bwrap /usr/bin/bwrap \
+    && bwrap --version
 
 COPY scripts/entrypoint.sh scripts/install-sdks.sh scripts/install-editor.sh /usr/local/lib/agent-devstation/
 COPY scripts/codex.sh /usr/local/bin/codex
