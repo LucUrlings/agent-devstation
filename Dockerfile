@@ -18,7 +18,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/opt/sdk/python/current/bin:/opt/sdk/node/current/bin:/opt/sdk/dotnet/current:/opt/sdk/java/current/bin:/opt/sdk/go/current/bin:/home/dev/go/bin:/opt/sdk/rust/current/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      bash ca-certificates curl git gnupg gosu jq openssh-client procps \
+      bash bubblewrap ca-certificates curl git gnupg gosu jq openssh-client procps \
       sudo passwd tar unzip xz-utils zstd build-essential libicu74 libssl3t64 \
     && rm -rf /var/lib/apt/lists/* \
     && if id -u ubuntu >/dev/null 2>&1; then usermod -l dev -d /home/dev -m ubuntu && groupmod -n dev ubuntu; else useradd -m -u 1000 -s /bin/bash dev; fi \

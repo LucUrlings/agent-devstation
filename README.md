@@ -8,8 +8,8 @@ The publishing workflows build `linux/amd64` and `linux/arm64` images at `ghcr.i
 
 ## Quick start
 
-1. Install Docker Engine or Docker Desktop with Compose.
-2. Download [`compose.yaml`](compose.yaml) into one directory. It selects Python 3.14 and Node.js 24 by default; the other SDKs and the browser editor are off. Create an optional, ignored `.env` in that directory to change the choices. If this Compose file is newer than the current full release, set `AGENT_DEVSTATION_TAG=nightly` in `.env` after its image publishes.
+1. Install Docker Engine or Docker Desktop with Compose. On an Ubuntu 24.04 Docker host, complete the [bubblewrap host setup](#codex-linux-sandbox-host-setup) for Codex's sandbox and phone folder picker.
+2. Download [`compose.yaml`](compose.yaml) and [`seccomp-codex.json`](seccomp-codex.json) into the **same directory**. Both files are required for Codex's Linux sandbox and the phone folder picker. The Compose file selects Python 3.14 and Node.js 24 by default; the other SDKs and the browser editor are off. Create an optional, ignored `.env` in that directory to change the choices. If this Compose file is newer than the current full release, set `AGENT_DEVSTATION_TAG=nightly` in `.env` after its image publishes.
 3. Start the selected image:
 
    ```sh
@@ -53,7 +53,7 @@ The first GHCR package may need its visibility changed to **Public** before anon
 
 ## Complete Compose configuration
 
-The included [`compose.yaml`](compose.yaml) has **no `build:` instruction**. It mounts `./workspaces` for project files and a Docker named volume for `/home/dev`, including the agents' and GitHub CLI's login state and editor settings. The editor is disabled by default.
+The included [`compose.yaml`](compose.yaml) has **no `build:` instruction**. It mounts `./workspaces` for project files and a Docker named volume for `/home/dev`, including the agents' and GitHub CLI's login state and editor settings. It also loads the adjacent [`seccomp-codex.json`](seccomp-codex.json) for Codex's Linux sandbox. The editor is disabled by default.
 
 ```yaml
 services:
@@ -61,6 +61,9 @@ services:
     image: ghcr.io/lucurlings/agent-devstation:${AGENT_DEVSTATION_TAG:-latest}
     pull_policy: always
     init: true
+    security_opt:
+      - seccomp=./seccomp-codex.json
+      - apparmor=unconfined
     environment:
       AGENT_DEVSTATION_SDK_PYTHON: ${AGENT_DEVSTATION_SDK_PYTHON-3.14}
       AGENT_DEVSTATION_SDK_NODE: ${AGENT_DEVSTATION_SDK_NODE-24}
@@ -86,6 +89,21 @@ volumes:
 ```
 
 `init: true` adds a small PID 1 process that forwards stop signals and reaps child processes. The service does not need `stdin_open` or `tty`; `docker compose exec` attaches its own interactive terminal when you launch an agent. The `dev` account defaults to UID/GID 1000. On Linux, set `AGENT_DEVSTATION_UID` and `AGENT_DEVSTATION_GID` to the output of `id -u` and `id -g` for the non-root user who owns your bind-mounted projects. UID/GID 0 are rejected. Docker Desktop handles its usual bind mount mapping. These values identify a user, not a process ID; no PID setting is needed. The container starts as root to install system SDKs, then runs the editor and idle process as `dev`; agent examples explicitly use `-u dev`. It never mounts the Docker socket. `pull_policy: always` checks the registry on each `docker compose up -d`, including when the image tag is unchanged; a changed image recreates the container.
+
+The seccomp file is based on [Docker's default profile](https://github.com/moby/profiles/blob/main/seccomp/default.json). It additionally permits `clone` and `unshare` when creating a user namespace, plus `mount`, `pivot_root`, and `umount2`, so Codex's bubblewrap sandbox can run inside Docker. On AppArmor hosts, Docker's default AppArmor policy can still deny the sandbox's mounts; `apparmor=unconfined` removes that container level AppArmor policy. This **reduces container isolation**. The service remains unprivileged with a seccomp filter, Docker's default capability limits, and no Docker socket, but run it only with projects and users you trust. Keep the profile file paired with Compose when copying or updating the deployment. See [NOTICE](NOTICE) for source and license details. [Docker's seccomp documentation](https://docs.docker.com/engine/security/seccomp/) explains the syscall control.
+
+### Codex Linux sandbox host setup
+
+On Ubuntu 24.04 Docker hosts, the kernel's AppArmor user namespace restriction can also block bubblewrap inside the container. [OpenAI recommends](https://learn.chatgpt.com/docs/sandboxing#prerequisites) loading Ubuntu's `bwrap-userns-restrict` profile. Run these commands **on the Docker host**, once:
+
+```sh
+sudo apt update
+sudo apt install apparmor-profiles apparmor-utils
+sudo install -m 0644 /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/bwrap-userns-restrict
+sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
+```
+
+This was required for the Codex sandbox probe to pass on GitHub's Ubuntu 24.04 ARM64 runner. It does not install an SDK or change the image. If the source profile is unavailable on your distribution, follow its AppArmor guidance rather than disabling the host restriction without reviewing the security impact.
 
 [Docker Compose can create a missing bind source directory](https://docs.docker.com/reference/compose-file/services/#short-syntax) as root. At startup, the image claims `./workspaces` when it is empty and root-owned, then checks that `dev` can write there. It does not change ownership of a nonempty mount or its project files. If an existing directory fails the check, fix its host ownership or ACLs, or set the UID/GID to its owner; the container log names the problem.
 
@@ -148,7 +166,13 @@ OpenAI's [developer command reference](https://learn.chatgpt.com/docs/developer-
 
 After you successfully run `codex remote-control start`, Agent Devstation remembers that choice in the named home volume and resumes Remote Control when the container restarts or is recreated. This applies after updating to an image with this feature and running `start` once more. Run `codex remote-control stop` to turn off automatic resumption; `codex logout` also clears it. Your ChatGPT login remains in the home volume. A recreated container downloads Codex's separate daemon package again on first use. Startup clears stale daemon process records and sockets left in the home volume by the previous container. If the official CLI times out waiting for the socket during startup, the image retries this one command twice; other Codex commands run directly. If automatic startup fails, the container remains available and logs the error; fix the issue and run `codex remote-control start` again.
 
-In ChatGPT Remote, select a project under `/workspaces`, for example `/workspaces/Watchtower`. `/home/dev` is the container user's home for agent login and settings. If the phone says “Could not find the remote home folder” or cannot create a project, check both paths with `docker compose exec -u dev agent-devstation bash -lc 'id; echo "$HOME"; ls -ld "$HOME" /workspaces; test -w "$HOME" && echo HOME_WRITABLE; test -w /workspaces && echo WORKSPACES_WRITABLE'`. A writable home does not imply a writable project mount. The phone's message alone does not establish which path failed; after fixing permissions, retry the folder picker. [OpenAI's Remote guide](https://developers.openai.com/blog/mastering-codex-remote-for-engineering) describes choosing the connected host and workspace on the phone.
+In ChatGPT Remote, select a project under `/workspaces`, for example `/workspaces/Watchtower`. `/home/dev` is the container user's home for agent login and settings. The phone's “Could not find the remote home folder” message can also mean its read-only sandbox failed before checking that directory; this is tracked in [Codex issue #45880](https://github.com/openai/codex/issues/45880). Verify the same lookup inside your container:
+
+```sh
+docker compose exec -u dev agent-devstation codex sandbox -c 'sandbox_mode="read-only"' /bin/sh -lc 'cd "$HOME" && pwd -P'
+```
+
+It should print `/home/dev`. If it reports a bubblewrap namespace or mount error, make sure the adjacent profile file and both Compose `security_opt` entries are present, then run `docker compose up -d --force-recreate`. Some Linux hosts additionally restrict unprivileged user namespaces through host AppArmor settings; follow [OpenAI's bubblewrap/AppArmor instructions](https://learn.chatgpt.com/docs/sandboxing#prerequisites) on the host if this probe still fails. For a separate project write error, check `id; ls -ld /workspaces; test -w /workspaces` inside the container. The phone folder picker still requires an account-based retest after the probe succeeds. [OpenAI's Remote guide](https://developers.openai.com/blog/mastering-codex-remote-for-engineering) describes choosing the connected host and workspace on the phone.
 
 **Claude Code:** from a trusted project, run `docker compose exec -u dev -w /workspaces/project agent-devstation claude remote-control` for server mode, or `claude --remote-control` for an interactive session. Accept the one-time confirmation; open its session URL on your phone or scan its QR code in the Claude app. `/remote-control` in an existing session enables it there. Claude requires a claude.ai **Pro, Max, Team, or Enterprise** subscription login. Team and Enterprise owners must enable the organization setting. API keys, `ANTHROPIC_AUTH_TOKEN`, and limited setup tokens cannot enable it. Accept workspace trust in the project first. The host must remain running with outbound HTTPS. [Claude Code Remote Control](https://code.claude.com/docs/en/remote-control)
 
