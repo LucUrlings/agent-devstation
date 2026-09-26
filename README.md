@@ -103,7 +103,7 @@ sudo install -m 0644 /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /e
 sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
 ```
 
-This was required for the Codex sandbox probe to pass on GitHub's Ubuntu 24.04 ARM64 runner. It does not install an SDK or change the image. If the source profile is unavailable on your distribution, follow its AppArmor guidance rather than disabling the host restriction without reviewing the security impact.
+This is a host setup; changing the container image does not change the host's namespace policy. It does not install an SDK or change the image. If the source profile is unavailable on your distribution, follow its AppArmor guidance rather than disabling the host restriction without reviewing the security impact.
 
 [Docker Compose can create a missing bind source directory](https://docs.docker.com/reference/compose-file/services/#short-syntax) as root. At startup, the image claims `./workspaces` when it is empty and root-owned, then checks that `dev` can write there. It does not change ownership of a nonempty mount or its project files. If an existing directory fails the check, fix its host ownership or ACLs, or set the UID/GID to its owner; the container log names the problem.
 
