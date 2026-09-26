@@ -152,7 +152,15 @@ done
 
 for name in python node dotnet java go rust; do
   version=${requests[$name]}
-  [[ -z "$version" ]] && continue
+  if [[ -z "$version" ]]; then
+    if [[ -e "$sdk_root/$name" || -L "$sdk_root/$name" ]]; then
+      echo "Uninstalling $name (not selected)"
+      rm -rf -- "$sdk_root/$name"
+    else
+      echo "$name not selected; not installed"
+    fi
+    continue
+  fi
   # A binary can report its version before the rest of an archive is extracted.
   # Treat only a fully verified installation as reusable after a restart.
   complete_marker="$sdk_root/$name/.agent-devstation-complete"
@@ -161,15 +169,15 @@ for name in python node dotnet java go rust; do
     current=$(installed_version "$name" || true)
   fi
   if [[ -n "$current" ]] && matches "$current" "$version"; then
-    echo "$name $current already installed"
+    echo "Found $name $current; already installed"
     continue
   fi
-  if [[ -n "$current" ]]; then
-    echo "Installed $name version $current does not match $version; recreate the container" >&2
-    exit 2
-  fi
   if [[ -e "$sdk_root/$name" || -L "$sdk_root/$name" ]]; then
-    echo "Removing incomplete $name installation"
+    if [[ -n "$current" ]]; then
+      echo "Uninstalling $name $current (requested $version)"
+    else
+      echo "Removing incomplete $name installation"
+    fi
     rm -rf -- "$sdk_root/$name"
   fi
   echo "Installing $name $version"
