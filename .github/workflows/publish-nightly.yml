@@ -54,6 +54,11 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           tags: ${{ env.IMAGE }}:nightly-${{ env.SOURCE_SHA }}-${{ matrix.arch }}
+      - name: Smoke-test the pushed architecture image
+        run: |
+          image="${IMAGE}:nightly-${SOURCE_SHA}-${{ matrix.arch }}"
+          docker pull "$image"
+          IMAGE="$image" bash tests/smoke.sh
 
   manifest:
     needs: build
