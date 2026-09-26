@@ -15,7 +15,7 @@ Set `AGENT_DEVSTATION_TAG=nightly` in an optional `.env` to use a new merged cha
 
 ## Compose and projects
 
-The linked [compose.yaml](../compose.yaml) is the complete one-file example. It mounts `./workspaces` for projects and a named volume at `/home/dev` for logins and settings. Both agents and the optional editor see the same files and SDKs. Do not use `docker compose down -v` unless you want to delete the home volume.
+The linked [compose.yaml](../compose.yaml) is the complete one-file example. It mounts `./workspaces` for projects and a named volume at `/home/dev` for logins and settings. Both agents and the optional editor see the same files and SDKs. `hostname: agent-devspace` makes the shell prompt show `dev@agent-devspace`; the Compose service name remains `agent-devstation`. Do not use `docker compose down -v` unless you want to delete the home volume.
 
 `init: true` forwards stop signals and reaps child processes. `stdin_open` and `tty` are unnecessary because `docker compose exec` provides a terminal. On Linux, set `AGENT_DEVSTATION_UID` and `AGENT_DEVSTATION_GID` to the owner of your project files if they differ from `1000:1000`. The image repairs an empty root-owned `./workspaces` bind mount; it will not change a nonempty project's ownership. The container does not mount the Docker socket or use `privileged: true`.
 

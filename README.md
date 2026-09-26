@@ -36,6 +36,7 @@ This enables the browser editor and Codex's Linux sandbox so you can try **both 
    services:
      agent-devstation:
        image: ghcr.io/lucurlings/agent-devstation:latest
+       hostname: agent-devspace
        pull_policy: always
        restart: unless-stopped
        init: true

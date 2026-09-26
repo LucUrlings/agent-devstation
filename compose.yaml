@@ -1,6 +1,7 @@
 services:
   agent-devstation:
     image: ghcr.io/lucurlings/agent-devstation:${AGENT_DEVSTATION_TAG:-latest}
+    hostname: agent-devspace
     pull_policy: always
     init: true
     # To use Codex's Linux sandbox and phone Remote Control, follow the
