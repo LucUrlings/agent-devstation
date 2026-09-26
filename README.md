@@ -8,7 +8,7 @@ The publishing workflows build `linux/amd64` and `linux/arm64` images at `ghcr.i
 
 ## Quick start
 
-1. Install Docker Engine or Docker Desktop with Compose. On an Ubuntu 24.04 Docker host, complete the [bubblewrap host setup](#codex-linux-sandbox-host-setup) for Codex's sandbox and phone folder picker.
+1. Install Docker Engine or Docker Desktop with Compose. The image already includes `bubblewrap`; see the [Codex sandbox host check](#codex-linux-sandbox-host-check) if its sandbox or phone folder picker reports a namespace error.
 2. Download [`compose.yaml`](compose.yaml) and [`seccomp-codex.json`](seccomp-codex.json) into the **same directory**. Both files are required for Codex's Linux sandbox and the phone folder picker. The Compose file selects Python 3.14 and Node.js 24 by default; the other SDKs and the browser editor are off. Create an optional, ignored `.env` in that directory to change the choices. If this Compose file is newer than the current full release, set `AGENT_DEVSTATION_TAG=nightly` in `.env` after its image publishes.
 3. Start the selected image:
 
@@ -43,7 +43,7 @@ There is no agent selector in Compose. Use `docker compose exec -u dev agent-dev
 | `nightly` | Newest successful `main` build; opt in with `AGENT_DEVSTATION_TAG=nightly`. |
 | `nightly-<commit SHA>` | An image built from that `main` commit. |
 
-Pull requests build both architectures in parallel, run the full SDK smoke test on AMD64, and verify the agent and editor commands on ARM64. A push to protected `main` runs the separate `Publish nightly image` workflow, which builds each architecture once, pulls and smoke-tests each pushed architecture image, then publishes the commit-specific multi-platform tag. BuildKit caches are separate by architecture; PRs can read the default branch's cache, while GitHub keeps PR-written caches scoped to that PR. The merged commit still gets its own trusted build. The workflow records its run number on the image index and moves `nightly` only when that run is at least as new as the currently promoted one. An older build cannot replace a newer one, and a later `main` push whose build or smoke test fails does not prevent the last successful build from becoming `nightly`. Fork pull requests cannot trigger a publish job. The separate `Publish release image` workflow runs when a full GitHub release is published. Its tag, such as `v0.1.0`, must point to a commit on `main`; it promotes that commit's already tested multi-platform image to the version tag and `latest` without rebuilding. Wait for the nightly workflow on `main` to finish before creating the release. `latest` does not move on ordinary merges.
+Pull requests build both architectures in parallel and run the full SDK and editor smoke test on each. A push to protected `main` runs the separate `Publish nightly image` workflow, which builds each architecture once, pulls and smoke-tests each pushed architecture image, then publishes the commit-specific multi-platform tag. BuildKit caches are separate by architecture; PRs can read the default branch's cache, while GitHub keeps PR-written caches scoped to that PR. The merged commit still gets its own trusted build. The workflow records its run number on the image index and moves `nightly` only when that run is at least as new as the currently promoted one. An older build cannot replace a newer one, and a later `main` push whose build or smoke test fails does not prevent the last successful build from becoming `nightly`. Fork pull requests cannot trigger a publish job. The separate `Publish release image` workflow runs when a full GitHub release is published. Its tag, such as `v0.1.0`, must point to a commit on `main`; it promotes that commit's already tested multi-platform image to the version tag and `latest` without rebuilding. Wait for the nightly workflow on `main` to finish before creating the release. `latest` does not move on ordinary merges.
 
 Every PR check and `main` build resolves the current [Codex `latest` release](https://learn.chatgpt.com/docs/codex/cli) and a Claude Code version present in the signed [`stable` apt repository](https://code.claude.com/docs/en/setup) for **both** architectures. The workflows pass those exact versions to both image builds. A new stable version changes the build input and refreshes the cached install; an unchanged version keeps the cache. Anthropic's apt `stable` channel can trail its newest release by about a week. Agent versions advance only when a new commit reaches `main`; there is no scheduled rebuild. A full release promotes the already built versions from its commit.
 
@@ -92,18 +92,21 @@ volumes:
 
 The seccomp file is based on [Docker's default profile](https://github.com/moby/profiles/blob/main/seccomp/default.json). It additionally permits `clone` and `unshare` when creating a user namespace, plus `mount`, `pivot_root`, and `umount2`, so Codex's bubblewrap sandbox can run inside Docker. On AppArmor hosts, Docker's default AppArmor policy can still deny the sandbox's mounts; `apparmor=unconfined` removes that container level AppArmor policy. This **reduces container isolation**. The service remains unprivileged with a seccomp filter, Docker's default capability limits, and no Docker socket, but run it only with projects and users you trust. Keep the profile file paired with Compose when copying or updating the deployment. See [NOTICE](NOTICE) for source and license details. [Docker's seccomp documentation](https://docs.docker.com/engine/security/seccomp/) explains the syscall control.
 
-### Codex Linux sandbox host setup
+### Codex Linux sandbox host check
 
-On Ubuntu 24.04 Docker hosts, the kernel's AppArmor user namespace restriction can also block bubblewrap inside the container. [OpenAI recommends](https://learn.chatgpt.com/docs/sandboxing#prerequisites) loading Ubuntu's `bwrap-userns-restrict` profile. Run these commands **on the Docker host**, once:
+The image installs Ubuntu's `bubblewrap` package, so there is no separate `bubblewrap` installation on the Docker host. The supplied Compose file also sets the container's seccomp and AppArmor options. After starting the container, check Codex's sandbox as `dev`:
 
 ```sh
-sudo apt update
-sudo apt install apparmor-profiles apparmor-utils
-sudo install -m 0644 /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/bwrap-userns-restrict
+docker compose exec -u dev agent-devstation codex sandbox -c 'sandbox_mode="read-only"' /bin/sh -lc 'cd "$HOME" && pwd -P'
+```
+
+If it prints `/home/dev`, no host setup is needed. If it reports a user namespace or AppArmor error on an Ubuntu 26.04 Docker host, check whether `/etc/apparmor.d/bwrap-userns-restrict` exists **on the host** and load it there:
+
+```sh
 sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
 ```
 
-This is a host setup; changing the container image does not change the host's namespace policy. It does not install an SDK or change the image. If the source profile is unavailable on your distribution, follow its AppArmor guidance rather than disabling the host restriction without reviewing the security impact.
+[Ubuntu 26.04 supplies that profile](https://packages.ubuntu.com/resolute/all/apparmor/filelist) in the `apparmor` package. If the file or `apparmor_parser` command is missing, run `sudo apt install apparmor apparmor-utils` on the host before loading the profile. On other distributions, follow their AppArmor or user namespace guidance. The image cannot change the host's namespace policy. [Official OpenAI documentation](https://learn.chatgpt.com/docs/sandboxing#prerequisites) explains the Linux sandbox prerequisites.
 
 [Docker Compose can create a missing bind source directory](https://docs.docker.com/reference/compose-file/services/#short-syntax) as root. At startup, the image claims `./workspaces` when it is empty and root-owned, then checks that `dev` can write there. It does not change ownership of a nonempty mount or its project files. If an existing directory fails the check, fix its host ownership or ACLs, or set the UID/GID to its owner; the container log names the problem.
 
