@@ -23,7 +23,7 @@ docker run --rm -e AGENT_DEVSTATION_UID=33 -e AGENT_DEVSTATION_GID=20 "$image" b
 
 docker run -d --name "$name" -e AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=false "$image" >/dev/null
 sleep 3
-docker exec -u dev "$name" bash -lc 'codex --version && claude --version && code-server --version'
+docker exec -u dev "$name" bash -lc 'codex --version && claude --version && gh --version && code-server --version'
 docker exec -u dev "$name" bash -lc '
   set -euo pipefail
   codex login --help | grep -- "--device-auth" >/dev/null

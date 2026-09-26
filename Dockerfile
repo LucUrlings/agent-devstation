@@ -42,6 +42,14 @@ RUN install -d -m 0755 /etc/apt/keyrings \
     && rm -rf /var/lib/apt/lists/* \
     && claude --version
 
+# GitHub's signed apt repository supplies the same gh command to all projects.
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && chmod 0644 /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/* \
+    && gh --version
+
 # The standalone editor bundles its private Node runtime. It never adds node to PATH.
 RUN curl -fsSL "https://github.com/coder/code-server/releases/download/v${CODE_SERVER_VERSION}/code-server-${CODE_SERVER_VERSION}-linux-${TARGETARCH}.tar.gz" -o /tmp/code-server.tar.gz \
     && mkdir -p /opt/code-server \

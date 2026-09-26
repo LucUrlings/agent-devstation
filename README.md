@@ -2,7 +2,7 @@
 
 # Agent Devstation
 
-A ready-to-run Docker development station for multiple projects. The Linux image includes **Codex**, **Claude Code**, and an optional browser editor (code-server). Select Python, Node.js, .NET, Java, Go, and Rust SDK versions through Compose. All tools see the same `/workspaces` tree and global SDK paths.
+A ready-to-run Docker development station for multiple projects. The Linux image includes **Codex**, **Claude Code**, **GitHub CLI (`gh`)**, and an optional browser editor (code-server). Select Python, Node.js, .NET, Java, Go, and Rust SDK versions through Compose. All tools see the same `/workspaces` tree and global SDK paths.
 
 The publishing workflows build `linux/amd64` and `linux/arm64` images at `ghcr.io/lucurlings/agent-devstation`. Successful merges to `main` publish `nightly`; full GitHub releases publish `latest` and a version tag. Users only pull images—no local build is part of setup.
 
@@ -51,7 +51,7 @@ The first GHCR package may need its visibility changed to **Public** before anon
 
 ## Complete Compose configuration
 
-The included [`compose.yaml`](compose.yaml) has **no `build:` instruction**. It mounts `./workspaces` for project files and a Docker named volume for `/home/dev`, including both agents' login state and editor settings. The editor is disabled by default.
+The included [`compose.yaml`](compose.yaml) has **no `build:` instruction**. It mounts `./workspaces` for project files and a Docker named volume for `/home/dev`, including the agents' and GitHub CLI's login state and editor settings. The editor is disabled by default.
 
 ```yaml
 services:
@@ -102,7 +102,7 @@ Rust's `1` follows its current stable channel and verifies the compiler is still
 | `AGENT_DEVSTATION_SDK_GO` | `1.26`, `1.26.1` | `go`, `gofmt` |
 | `AGENT_DEVSTATION_SDK_RUST` | `1.85`, `1.85.1` | `rustc`, `cargo`, `rustup` |
 
-Startup validates all values before downloads, checks installed versions, and installs only missing selections into `/opt/sdk/<language>/`. It marks an SDK complete only after installation and version verification. If a download or extraction was interrupted, the next start removes that SDK's incomplete directory and retries, even when its version command already works or the `current` link was never created. The image `PATH` includes stable `current` links there. `DOTNET_ROOT`, `JAVA_HOME`, `GOROOT`, `GOPATH`, `CARGO_HOME`, and `RUSTUP_HOME` are fixed in the image environment. Thus commands and required variables are available to agents, Compose shells, and the editor terminal. Codex, Claude Code, and code-server have separate dependencies; code-server's bundled Node is not on the user `PATH`. The startup script does not claim an SDK absent just because it was unselected; CI checks the actual commands.
+Startup validates all values before downloads, checks installed versions, and installs only missing selections into `/opt/sdk/<language>/`. It marks an SDK complete only after installation and version verification. If a download or extraction was interrupted, the next start removes that SDK's incomplete directory and retries, even when its version command already works or the `current` link was never created. The image `PATH` includes stable `current` links there. `DOTNET_ROOT`, `JAVA_HOME`, `GOROOT`, `GOPATH`, `CARGO_HOME`, and `RUSTUP_HOME` are fixed in the image environment. Thus commands and required variables are available to agents, Compose shells, and the editor terminal. Codex, Claude Code, GitHub CLI, and code-server are included independently of SDK selection; code-server's bundled Node is not on the user `PATH`. The startup script does not claim an SDK absent just because it was unselected; CI checks the actual commands.
 
 Changing an SDK variable changes Compose configuration. Run `docker compose up -d` to **recreate** the container. This discards its writable SDK layer, so exactly the new selection is installed. `docker compose restart` retains the container and skips downloads, but does not apply changed configuration. `docker compose down` removes the container but preserves the home volume and bind-mounted projects; avoid `down -v` unless you mean to delete login state. A recreated container downloads selected SDKs again; no SDK volume retains a deselected runtime. With `pull_policy: always`, Compose checks for an updated image on each `up -d`; it needs registry access even when a local image exists. A newly pulled image also causes recreation.
 
@@ -123,7 +123,9 @@ Codex stores credentials under `/home/dev/.codex` on the named home volume. API 
 
 **Claude Code with a subscription:** run `docker compose exec -u dev agent-devstation claude auth login`, select the claude.ai account flow, and complete the browser instructions. Its login and settings files are in the named home volume. **Claude Code with an API key:** export `ANTHROPIC_API_KEY` on the host, then run `docker compose exec -u dev -e ANTHROPIC_API_KEY agent-devstation claude`. Interactive Claude may ask once before using the key; `claude -p` uses it when present. Unset the variable for subscription use. [Claude Code authentication](https://code.claude.com/docs/en/authentication)
 
-Never put agent API keys in the image, repository, `.env`, or command history. The ignored `.env` holds SDK choices and, if enabled, the editor password; protect it as a secret. Anyone with Docker daemon, home volume, editor terminal, or agent account access can read sensitive project and login data.
+**GitHub CLI:** `gh` is always available to both agents, shells, and the editor terminal. To sign in, run `docker compose exec -u dev agent-devstation gh auth login` and follow the device/browser instructions. This login is separate from Codex and Claude. Without a credential store in the container, `gh` may save its token in plain text under `/home/dev/.config/gh` on the named home volume. For a temporary token instead, export `GH_TOKEN` on the host and run `docker compose exec -u dev -w /workspaces/project -e GH_TOKEN agent-devstation gh repo view`, replacing `project` with a project directory. Do not add the token to Compose or `.env`. [GitHub CLI authentication](https://cli.github.com/manual/gh_auth_login), [environment variables](https://cli.github.com/manual/gh_help_environment)
+
+Never put API keys or GitHub tokens in the image, repository, `.env`, or command history. The ignored `.env` holds SDK choices and, if enabled, the editor password; protect it as a secret. Anyone with Docker daemon, home volume, editor terminal, or agent account access can read sensitive project and login data.
 
 ## Official phone Remote Control
 
