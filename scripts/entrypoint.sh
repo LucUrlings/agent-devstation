@@ -36,6 +36,22 @@ mkdir -p /home/dev/.codex /home/dev/.claude /home/dev/.local/share/code-server /
 chown dev:dev /home/dev /home/dev/.codex /home/dev/.claude /home/dev/.local /home/dev/.local/share
 chown -R dev:dev /home/dev/.local/share/code-server
 
+# CODEX_HOME persists, while the daemon package under /opt/codex and /tmp do
+# not survive container recreation. A missing package needs a fresh bootstrap;
+# on a normal restart only its dead process records and socket need clearing.
+codex_daemon_dir=/home/dev/.codex/app-server-daemon
+if [[ -d "$codex_daemon_dir" ]]; then
+  if [[ ! -x /home/dev/.codex/packages/app-server-daemon/current/bin/codex ]]; then
+    echo 'Clearing stale Codex daemon state'
+    rm -rf -- "$codex_daemon_dir"
+  else
+    rm -f -- "$codex_daemon_dir"/daemon.pid "$codex_daemon_dir"/daemon-updater.pid \
+      "$codex_daemon_dir"/app-server.pid "$codex_daemon_dir"/app-server-updater.pid \
+      "$codex_daemon_dir"/daemon-updater.sock
+  fi
+fi
+rm -f -- /home/dev/.codex/app-server-control/app-server-control.sock
+
 # Installers run as root, but HOME belongs to dev in normal sessions. Keep
 # installer caches out of the persisted dev home.
 HOME=/root /usr/local/lib/agent-devstation/install-sdks.sh

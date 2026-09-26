@@ -5,7 +5,9 @@ image=${IMAGE:-agent-devstation:ci}
 name="devstation-smoke-$$"
 java_name="devstation-java-smoke-$$"
 cache_volume="devstation-cache-smoke-$$"
-trap 'docker rm -f "$name" "$java_name" >/dev/null 2>&1 || true; docker volume rm "$cache_volume" >/dev/null 2>&1 || true' EXIT
+codex_name="devstation-codex-smoke-$$"
+codex_volume="devstation-codex-home-smoke-$$"
+trap 'docker rm -f "$name" "$java_name" "$codex_name" >/dev/null 2>&1 || true; docker volume rm "$cache_volume" "$codex_volume" >/dev/null 2>&1 || true' EXIT
 
 # A home volume created by an older image can contain root-owned uv cache files
 # even when the cache directory itself belongs to dev.
@@ -33,6 +35,23 @@ docker exec -u dev "$name" bash -lc '
 docker exec -u dev "$name" bash -lc 'for sdk in python python3 pip3 node npm npx corepack dotnet java javac go gofmt rustc cargo rustup; do if command -v "$sdk" >/dev/null; then echo "Unexpected SDK command: $sdk" >&2; exit 1; fi; done'
 docker exec -u dev "$name" bash -lc '! curl -s --max-time 1 -o /dev/null http://127.0.0.1:8080/'
 docker rm -f "$name" >/dev/null
+
+# The home volume retains Codex daemon state, but its package under /opt/codex
+# belongs to the disposable container layer. A recreated container must let the
+# CLI bootstrap that package again instead of trusting the stale state.
+docker volume create "$codex_volume" >/dev/null
+for generation in 1 2; do
+  docker run -d --name "$codex_name" -v "$codex_volume:/home/dev" "$image" >/dev/null
+  docker exec -u dev "$codex_name" bash -lc '
+    set -euo pipefail
+    status=0
+    timeout 60s codex remote-control start >/tmp/codex-remote-start.log 2>&1 || status=$?
+    [[ "$status" == 0 || "$status" == 1 ]] || { cat /tmp/codex-remote-start.log; exit 1; }
+    test -x /home/dev/.codex/packages/app-server-daemon/current/bin/codex
+    test -S /home/dev/.codex/app-server-control/app-server-control.sock
+  '
+  docker rm -f "$codex_name" >/dev/null
+done
 
 if docker run --rm -e AGENT_DEVSTATION_SDK_NODE=24.x "$image" true >/dev/null 2>&1; then
   echo 'Version syntax accepted .x unexpectedly' >&2
