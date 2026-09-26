@@ -25,11 +25,33 @@ if [[ "$dev_uid" != "$(id -u dev)" ]]; then usermod -o -u "$dev_uid" dev; fi
 if [[ "$(stat -c %u:%g /home/dev)" != "$(id -u dev):$(id -g dev)" ]]; then
   chown -R dev:dev /home/dev
 fi
+if ! gosu dev test -w /home/dev || ! gosu dev test -x /home/dev; then
+  echo "/home/dev is not accessible to dev (UID $(id -u dev), GID $(id -g dev); directory owner $(stat -c %u:%g /home/dev)). Fix ownership or permissions of the home volume." >&2
+  exit 1
+fi
 if [[ "$(stat -c %u:%g /opt/codex)" != "$(id -u dev):$(id -g dev)" ]]; then
   chown -R dev:dev /opt/codex
 fi
-if ! mountpoint -q /workspaces && [[ "$(stat -c %u:%g /workspaces)" != "$(id -u dev):$(id -g dev)" ]]; then
-  chown dev:dev /workspaces
+dev_can_create_workspace() {
+  gosu dev test -w /workspaces && gosu dev test -x /workspaces
+}
+if ! mountpoint -q /workspaces; then
+  if [[ "$(stat -c %u:%g /workspaces)" != "$(id -u dev):$(id -g dev)" ]]; then
+    chown dev:dev /workspaces
+  fi
+elif ! dev_can_create_workspace \
+  && [[ "$(stat -c %u /workspaces)" == 0 ]] \
+  && [[ -z "$(find /workspaces -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
+  # Compose creates a missing ./workspaces bind source as an empty root-owned
+  # directory on Linux. Claim only that empty mount, never existing projects.
+  echo 'Claiming empty root-owned /workspaces mount for dev'
+  if ! chown dev:dev /workspaces; then
+    echo 'Could not claim the empty /workspaces mount' >&2
+  fi
+fi
+if ! dev_can_create_workspace; then
+  echo "/workspaces is not writable by dev (UID $(id -u dev), GID $(id -g dev); directory owner $(stat -c %u:%g /workspaces)). Set AGENT_DEVSTATION_UID/GID to the host owner or fix ownership of the mounted workspaces directory." >&2
+  exit 1
 fi
 
 mkdir -p /home/dev/.codex /home/dev/.claude /home/dev/.local/share/code-server /workspaces
