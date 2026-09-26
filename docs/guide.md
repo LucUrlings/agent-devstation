@@ -15,7 +15,7 @@ Set `AGENT_DEVSTATION_TAG=nightly` in an optional `.env` to use a new merged cha
 
 ## Compose and projects
 
-The linked [compose.yaml](../compose.yaml) is the complete one-file example. It mounts `./workspaces` for projects and a named volume at `/home/dev` for logins and settings. Both agents and the optional editor see the same files and SDKs. Do not use `docker compose down -v` unless you want to delete the home volume.
+The linked [compose.yaml](../compose.yaml) is the complete one-file example. It mounts host `./workspaces` at `/home/dev/workspaces` inside the container and a named volume at `/home/dev` for logins and settings. This puts projects under the phone folder picker's starting home folder. Both agents and the optional editor see the same files and SDKs. `hostname` makes the shell prompt show `dev@agent-devspace`, while `container_name` names the Docker container `agent-devspace`. The Compose service remains `agent-devstation` for `docker compose exec`. A fixed container name allows only one instance with that name per Docker host; change or remove it for another instance. Do not use `docker compose down -v` unless you want to delete the home volume.
 
 `init: true` forwards stop signals and reaps child processes. `stdin_open` and `tty` are unnecessary because `docker compose exec` provides a terminal. On Linux, set `AGENT_DEVSTATION_UID` and `AGENT_DEVSTATION_GID` to the owner of your project files if they differ from `1000:1000`. The image repairs an empty root-owned `./workspaces` bind mount; it will not change a nonempty project's ownership. The container does not mount the Docker socket or use `privileged: true`.
 
@@ -24,7 +24,7 @@ The linked [compose.yaml](../compose.yaml) is the complete one-file example. It 
 Run Codex without host namespace setup:
 
 ```sh
-docker compose exec -u dev -w /workspaces/project agent-devstation codex --no-daemon --sandbox danger-full-access
+docker compose exec -u dev -w /home/dev/workspaces/project agent-devstation codex --no-daemon --sandbox danger-full-access
 ```
 
 Replace `project` with your project directory. Codex can access all files available to `dev` inside the container, including saved logins. `--no-daemon` means no Codex phone Remote Control. See [OpenAI's permission modes](https://learn.chatgpt.com/docs/sandboxing?surface=cli#how-permissions-work).
@@ -37,7 +37,17 @@ For Codex's normal sandbox and phone Remote Control, uncomment `security_opt` in
 docker compose exec -u dev agent-devstation codex sandbox -c 'sandbox_mode="read-only"' /bin/sh -lc 'cd "$HOME" && pwd -P'
 ```
 
-If it prints `/home/dev`, run plain `codex` from a project. If it fails with a user-namespace error on an **Ubuntu 24.04 Docker host**, load Ubuntu's `bwrap` AppArmor profile on the host:
+If it prints `/home/dev`, the sandbox prerequisite is ready. Run plain `codex` from a project, or sign in with ChatGPT and follow the [Codex Remote Control steps](#official-phone-remote-control) to start and pair your phone.
+
+### bwrap loopback error
+
+If the sandbox check prints this error on an **Ubuntu 24.04 Docker host**:
+
+```text
+bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted
+```
+
+First confirm that the full Compose example's `security_opt` lines are enabled and run `docker compose up -d` to recreate the container. Then copy and load Ubuntu's `bwrap` AppArmor profile **on the Docker host**:
 
 ```sh
 sudo apt update
@@ -46,7 +56,7 @@ sudo install -m 0644 /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /e
 sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
 ```
 
-Repeat the sandbox check afterward. On Ubuntu 26.04, the profile ships with `apparmor` at `/etc/apparmor.d/bwrap-userns-restrict`; load it there if needed. Debian and Fedora may use different host rules. [OpenAI's Linux prerequisites](https://learn.chatgpt.com/docs/sandboxing?surface=cli#prerequisites) explain the host requirements. The image cannot override a host namespace restriction.
+Run the sandbox check again; it should print `/home/dev`. The package step may report both packages already installed—still run the copy and parser commands. On Ubuntu 26.04, the profile ships with `apparmor` at `/etc/apparmor.d/bwrap-userns-restrict`; load it there if needed. Debian and Fedora may use different host rules. [OpenAI's Linux prerequisites](https://learn.chatgpt.com/docs/sandboxing?surface=cli#prerequisites) explain the host requirements. The image cannot override a host namespace restriction.
 
 To undo these Ubuntu 24.04 profile steps **if that profile file did not exist before you copied it**, remove the loaded profile first, then the file:
 
@@ -94,13 +104,13 @@ docker compose exec -u dev agent-devstation codex remote-control pair
 
 [OpenAI documents these CLI commands](https://learn.chatgpt.com/docs/developer-commands) but marks them experimental. Its [general phone setup guide](https://learn.chatgpt.com/docs/remote-connections) still describes pairing through the desktop app, so headless pairing is not guaranteed. If your phone offers manual code entry, use the short-lived code while signed in to the same ChatGPT account. An API key alone cannot pair a phone. Do not expose a Codex app-server port.
 
-After a successful `start`, the home volume remembers the choice and resumes Remote Control after restart or recreation. `codex remote-control stop` or `codex logout` turns off automatic resumption. A recreated container downloads Codex's separate daemon package again. The phone folder picker should show projects under `/workspaces`; if it cannot find the home folder, repeat the [sandbox probe](#codex-sandboxed-setup). Pairing and the phone UI require a manual account test.
+After a successful `start`, the home volume remembers the choice and resumes Remote Control after restart or recreation. `codex remote-control stop` or `codex logout` turns off automatic resumption. A recreated container downloads Codex's separate daemon package again. The phone folder picker starts at `/home/dev` and should show `workspaces` there; if it cannot find the home folder, repeat the [sandbox probe](#codex-sandboxed-setup). Pairing and the phone UI require a manual account test.
 
-**Claude Code:** from a project, run `docker compose exec -u dev -w /workspaces/project agent-devstation claude remote-control`, then open its URL or scan its QR code. Claude requires an eligible Pro, Max, Team, or Enterprise subscription login; an API key alone does not enable Remote Control. Organization policy and project trust can also block it. Re-run the command after a container restart. [Claude Remote Control](https://code.claude.com/docs/en/remote-control).
+**Claude Code:** from a project, run `docker compose exec -u dev -w /home/dev/workspaces/project agent-devstation claude remote-control`, then open its URL or scan its QR code. Claude requires an eligible Pro, Max, Team, or Enterprise subscription login; an API key alone does not enable Remote Control. Organization policy and project trust can also block it. Re-run the command after a container restart. [Claude Remote Control](https://code.claude.com/docs/en/remote-control).
 
 ## Browser editor
 
-Set `AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=true` and a strong `AGENT_DEVSTATION_VSCODE_PASSWORD` in `.env`, then run `docker compose up -d`. The image downloads code-server on first use; turning the editor off and recreating removes it. Its login page is separate from agent accounts. It opens `/workspaces` and its terminal has the selected SDKs.
+Set `AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=true` and a strong `AGENT_DEVSTATION_VSCODE_PASSWORD` in `.env`, then run `docker compose up -d`. The image downloads code-server on first use; turning the editor off and recreating removes it. Its login page is separate from agent accounts. It opens `/home/dev/workspaces` and its terminal has the selected SDKs.
 
 Container port **8080** serves only the editor. For local access, uncomment the loopback port mapping in Compose. For remote access, configure your reverse proxy to reach `agent-devstation:8080` on a shared network, with TLS, proxy authentication, and WebSocket support. Keep code-server's own password enabled. Do not expose an agent protocol port or mount the Docker socket.
 

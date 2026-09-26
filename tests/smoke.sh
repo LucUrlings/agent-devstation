@@ -8,7 +8,9 @@ cache_volume="devstation-cache-smoke-$$"
 codex_name="devstation-codex-smoke-$$"
 codex_volume="devstation-codex-home-smoke-$$"
 workspace_volume="devstation-workspace-smoke-$$"
-trap 'docker rm -f "$name" "$java_name" "$codex_name" >/dev/null 2>&1 || true; docker volume rm "$cache_volume" "$codex_volume" "$workspace_volume" >/dev/null 2>&1 || true' EXIT
+nested_workspace_volume="devstation-nested-workspace-smoke-$$"
+nested_home_volume="devstation-nested-home-smoke-$$"
+trap 'docker rm -f "$name" "$java_name" "$codex_name" >/dev/null 2>&1 || true; docker volume rm "$cache_volume" "$codex_volume" "$workspace_volume" "$nested_workspace_volume" "$nested_home_volume" >/dev/null 2>&1 || true' EXIT
 trap 'echo "Smoke test failed at line $LINENO" >&2' ERR
 
 wait_for_editor() {
@@ -51,11 +53,12 @@ bash tests/codex-wrapper.sh
 # The simple Compose path retains Docker's default security filters. The
 # optional sandboxed path needs the options below; test that path separately.
 test "$(docker compose config --format json | jq -r '.services["agent-devstation"].security_opt // [] | length')" = 0
+docker compose config --format json | jq -e '.services["agent-devstation"].volumes | any(.target == "/home/dev/workspaces")' >/dev/null
 docker run --rm "$image" bash -lc 'test -x /usr/bin/bwrap'
 test "$(docker run --rm --security-opt seccomp=unconfined --security-opt apparmor=unconfined "$image" \
   codex sandbox -c 'sandbox_mode="read-only"' /bin/sh -lc 'cd "$HOME" && pwd -P')" = /home/dev
 if docker run --rm --security-opt seccomp=unconfined --security-opt apparmor=unconfined "$image" \
-  codex sandbox -c 'sandbox_mode="read-only"' /bin/sh -lc 'touch /workspaces/codex-read-only-probe' >/dev/null 2>&1; then
+  codex sandbox -c 'sandbox_mode="read-only"' /bin/sh -lc 'touch /home/dev/workspaces/codex-read-only-probe' >/dev/null 2>&1; then
   echo 'Codex read-only sandbox allowed a workspace write' >&2
   exit 1
 fi
@@ -63,17 +66,36 @@ fi
 # Compose can create ./workspaces as an empty root-owned bind source on Linux.
 # The image must make that mount writable without taking over existing files.
 docker volume create "$workspace_volume" >/dev/null
-docker run --rm --mount "type=volume,src=$workspace_volume,dst=/workspaces,volume-nocopy" --entrypoint bash "$image" -lc \
-  'chown root:root /workspaces; chmod 755 /workspaces'
-docker run --rm --mount "type=volume,src=$workspace_volume,dst=/workspaces,volume-nocopy" "$image" bash -lc \
-  'test "$HOME" = /home/dev && test -w "$HOME" && test -w /workspaces && git init -q --bare /tmp/smoke-origin.git && git clone -q /tmp/smoke-origin.git /workspaces/Watchtower && test -d /workspaces/Watchtower/.git'
-docker run --rm --mount "type=volume,src=$workspace_volume,dst=/workspaces,volume-nocopy" --entrypoint bash "$image" -lc \
-  'chown root:root /workspaces'
-if output=$(docker run --rm --mount "type=volume,src=$workspace_volume,dst=/workspaces,volume-nocopy" "$image" true 2>&1); then
+docker run --rm --mount "type=volume,src=$workspace_volume,dst=/home/dev/workspaces,volume-nocopy" --entrypoint bash "$image" -lc \
+  'chown root:root /home/dev/workspaces; chmod 755 /home/dev/workspaces'
+docker run --rm --mount "type=volume,src=$workspace_volume,dst=/home/dev/workspaces,volume-nocopy" "$image" bash -lc \
+  'test "$HOME" = /home/dev && test -w "$HOME" && test -w /home/dev/workspaces && git init -q --bare /tmp/smoke-origin.git && git clone -q /tmp/smoke-origin.git /home/dev/workspaces/Watchtower && test -d /home/dev/workspaces/Watchtower/.git'
+docker run --rm --mount "type=volume,src=$workspace_volume,dst=/home/dev/workspaces,volume-nocopy" --entrypoint bash "$image" -lc \
+  'chown root:root /home/dev/workspaces'
+if output=$(docker run --rm -e AGENT_DEVSTATION_UID=1234 -e AGENT_DEVSTATION_GID=1234 \
+  --mount "type=volume,src=$workspace_volume,dst=/home/dev/workspaces,volume-nocopy" "$image" true 2>&1); then
   echo 'Nonempty root-owned workspace was accepted unexpectedly' >&2
   exit 1
 fi
-[[ "$output" == *'/workspaces is not writable by dev'* ]] || { echo "$output" >&2; exit 1; }
+[[ "$output" == *'/home/dev/workspaces is not writable by dev'* ]] || { echo "$output" >&2; exit 1; }
+docker run --rm --mount "type=volume,src=$workspace_volume,dst=/home/dev/workspaces,volume-nocopy" --entrypoint bash "$image" -lc \
+  'test "$(stat -c %u /home/dev/workspaces)" = 0 && test "$(stat -c %u /home/dev/workspaces/Watchtower)" = 1000'
+
+# The Compose layout nests a project mount under the persisted home volume.
+docker volume create "$nested_home_volume" >/dev/null
+docker volume create "$nested_workspace_volume" >/dev/null
+docker run --rm --mount "type=volume,src=$nested_home_volume,dst=/home/dev" \
+  --mount "type=volume,src=$nested_workspace_volume,dst=/home/dev/workspaces,volume-nocopy" "$image" bash -lc \
+  'test "$PWD" = /home/dev/workspaces && test -w "$HOME/workspaces" && test -w "$HOME/.codex"'
+# Changing the dev UID must repair the home volume without taking ownership of
+# existing project files in the nested workspace mount.
+docker run --rm --mount "type=volume,src=$nested_workspace_volume,dst=/home/dev/workspaces,volume-nocopy" \
+  --entrypoint bash "$image" -lc \
+  'mkdir -p /home/dev/workspaces/project && touch /home/dev/workspaces/project/existing && chown -R 1000:1000 /home/dev/workspaces/project && chown 1234:1234 /home/dev/workspaces'
+docker run --rm -e AGENT_DEVSTATION_UID=1234 -e AGENT_DEVSTATION_GID=1234 \
+  --mount "type=volume,src=$nested_home_volume,dst=/home/dev" \
+  --mount "type=volume,src=$nested_workspace_volume,dst=/home/dev/workspaces,volume-nocopy" "$image" bash -lc \
+  'test "$(id -u):$(id -g)" = 1234:1234 && test -w "$HOME" && test -w "$HOME/workspaces" && test "$(stat -c %u:%g "$HOME/workspaces/project/existing")" = 1000:1000'
 
 # A home volume created by an older image can contain root-owned uv cache files
 # even when the cache directory itself belongs to dev.
@@ -83,9 +105,9 @@ docker run --rm -v "$cache_volume:/home/dev" --entrypoint bash "$image" -lc \
 docker run --rm -v "$cache_volume:/home/dev" "$image" bash -lc \
   'test -w /home/dev/.cache/uv/root-owned && test -f /home/dev/.cache/.agent-devstation-ownership-v1'
 docker run --rm -e AGENT_DEVSTATION_UID=1234 -e AGENT_DEVSTATION_GID=1234 "$image" bash -lc \
-  'test "$(id -u):$(id -g)" = 1234:1234 && test -w /home/dev/.codex && test -w /workspaces'
+  'test "$(id -u):$(id -g)" = 1234:1234 && test -w /home/dev/.codex && test -w /home/dev/workspaces'
 docker run --rm -e AGENT_DEVSTATION_UID=33 -e AGENT_DEVSTATION_GID=20 "$image" bash -lc \
-  'test "$(id -u):$(id -g)" = 33:20 && test -w /home/dev/.codex && test -w /workspaces'
+  'test "$(id -u):$(id -g)" = 33:20 && test -w /home/dev/.codex && test -w /home/dev/workspaces'
 
 docker run -d --name "$name" -e AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=false "$image" >/dev/null
 sleep 3
@@ -177,7 +199,7 @@ docker exec -u dev "$name" bash -lc 'python3 --version && node --version && dotn
 docker exec -u dev "$name" code-server --version
 docker exec -i -u dev -e DOTNET_CLI_TELEMETRY_OPTOUT=1 "$name" bash -s < tests/sdk-functional.sh
 docker exec -u dev "$name" bash -lc 'curl -s -D - -o /dev/null http://127.0.0.1:8080/ | grep -qi "Location: ./login"'
-docker exec -u dev "$name" bash -lc 'curl -s -c /tmp/editor-cookie -o /dev/null -d password=smoke-only-password http://127.0.0.1:8080/login; curl -s -b /tmp/editor-cookie -D - -o /dev/null http://127.0.0.1:8080/ | grep -qi "Location: ./?folder=/workspaces"'
+docker exec -u dev "$name" bash -lc 'curl -s -c /tmp/editor-cookie -o /dev/null -d password=smoke-only-password http://127.0.0.1:8080/login; curl -s -b /tmp/editor-cookie -D - -o /dev/null http://127.0.0.1:8080/ | grep -qi "Location: ./?folder=/home/dev/workspaces"'
 
 # A hard interruption can leave extraction files beside an otherwise complete
 # editor installation. Startup must clear them without downloading again.

@@ -2,7 +2,7 @@
 
 # Agent Devstation
 
-A prebuilt Docker workspace for **Codex**, **Claude Code**, GitHub CLI, and optional SDKs and browser editing. Projects live under `/workspaces`; the agents and editor share the same files and SDKs. Images support Linux AMD64 and ARM64. Neither setup needs a repository clone or image build.
+A prebuilt Docker workspace for **Codex**, **Claude Code**, GitHub CLI, and optional SDKs and browser editing. Projects live under `/home/dev/workspaces`; the agents and editor share the same files and SDKs. Images support Linux AMD64 and ARM64. Neither setup needs a repository clone or image build.
 
 ## Simple setup: terminal agents
 
@@ -19,9 +19,9 @@ Use this for terminal work without changing host sandbox settings. Codex runs wi
 3. Clone a project, then run either agent from it:
 
    ```sh
-   docker compose exec -u dev agent-devstation git clone https://github.com/you/project.git /workspaces/project
-   docker compose exec -u dev -w /workspaces/project agent-devstation codex --no-daemon --sandbox danger-full-access
-   docker compose exec -u dev -w /workspaces/project agent-devstation claude
+   docker compose exec -u dev agent-devstation git clone https://github.com/you/project.git /home/dev/workspaces/project
+   docker compose exec -u dev -w /home/dev/workspaces/project agent-devstation codex --no-daemon --sandbox danger-full-access
+   docker compose exec -u dev -w /home/dev/workspaces/project agent-devstation claude
    ```
 
 Run `docker compose exec -u dev agent-devstation bash` for a shell. The default Compose selects Python `3.14` and Node.js `24`; [change SDKs or enable the editor](#customize-either-setup) when needed. Claude Code phone Remote Control is also available with an eligible subscription; see the [full setup](#full-setup-editor-and-phone-remote-control).
@@ -36,6 +36,8 @@ This enables the browser editor and Codex's Linux sandbox so you can use **eithe
    services:
      agent-devstation:
        image: ghcr.io/lucurlings/agent-devstation:latest
+       hostname: agent-devspace
+       container_name: agent-devspace
        pull_policy: always
        restart: unless-stopped
        init: true
@@ -54,7 +56,7 @@ This enables the browser editor and Codex's Linux sandbox so you can use **eithe
          AGENT_DEVSTATION_UID: "1000"
          AGENT_DEVSTATION_GID: "1000"
        volumes:
-         - ./workspaces:/workspaces
+         - ./workspaces:/home/dev/workspaces
          - devstation-home:/home/dev
        ports:
          - "127.0.0.1:8080:8080"
@@ -69,7 +71,7 @@ This enables the browser editor and Codex's Linux sandbox so you can use **eithe
    ```sh
    docker compose exec -u dev agent-devstation codex login --device-auth
    docker compose exec -u dev agent-devstation claude auth login
-   docker compose exec -u dev agent-devstation git clone https://github.com/you/project.git /workspaces/project
+   docker compose exec -u dev agent-devstation git clone https://github.com/you/project.git /home/dev/workspaces/project
    ```
 
    Run only the login commands you need. If you use GitHub CLI, also run `docker compose exec -u dev agent-devstation gh auth login`.
@@ -80,21 +82,21 @@ This enables the browser editor and Codex's Linux sandbox so you can use **eithe
    docker compose exec -u dev agent-devstation codex sandbox -c 'sandbox_mode="read-only"' /bin/sh -lc 'cd "$HOME" && pwd -P'
    ```
 
-   It should print `/home/dev`. If it fails with a user-namespace error, follow the [host setup steps](docs/guide.md#codex-sandboxed-setup) and [OpenAI's Linux prerequisites](https://learn.chatgpt.com/docs/sandboxing?surface=cli#prerequisites). Ubuntu 24.04 may need a one-time AppArmor profile on the Docker host. The image includes `bubblewrap`. The two `security_opt` settings relax Docker's seccomp and container AppArmor filters for this service.
+   It should print `/home/dev`. For `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`, follow the [Ubuntu 24.04 host fix](docs/guide.md#bwrap-loopback-error). The image includes `bubblewrap`; the two `security_opt` settings relax Docker's seccomp and container AppArmor filters for this service.
 
 5. Run the phone commands for whichever agent you use. Codex starts its background server and pairs while signed in to the same ChatGPT account. Claude Code shows a URL or QR code; keep its command running while using it.
 
    ```sh
    docker compose exec -u dev agent-devstation codex remote-control start
    docker compose exec -u dev agent-devstation codex remote-control pair
-   docker compose exec -u dev -w /workspaces/project agent-devstation claude remote-control
+   docker compose exec -u dev -w /home/dev/workspaces/project agent-devstation claude remote-control
    ```
 
    Codex resumes a successful Remote Control start after container recreation; Claude's command must be run again. Neither agent needs a public inbound port. [Phone details and limitations](docs/guide.md#official-phone-remote-control).
 
 6. Open the editor at `http://localhost:8080` **on the Docker host** and enter the `.env` password. From another machine, run `ssh -L 8080:127.0.0.1:8080 user@your-server` and open `http://localhost:8080` locally. Alternatively, use your own reverse proxy with TLS, authentication, and WebSocket support. A containerized proxy must share a Docker network with Agent Devstation and target **port 8080**. Only the editor uses that port; do not publish an agent protocol port. [Editor details](docs/guide.md#browser-editor).
 
-Use `docker compose exec -u dev -w /workspaces/project agent-devstation codex` or the equivalent `claude` command for normal terminal sessions. You can move from the simple setup to this one without losing projects or logins if you keep the same mounts and volume name.
+Use `docker compose exec -u dev -w /home/dev/workspaces/project agent-devstation codex` or the equivalent `claude` command for normal terminal sessions. You can move from the simple setup to this one without losing projects or logins if you keep the same mounts and volume name.
 
 ## Customize either setup
 
@@ -115,7 +117,7 @@ The linked Compose file leaves the editor off. To enable it there, set `AGENT_DE
 
 ## Updates and security
 
-`latest` follows full releases; `nightly` follows successful merges to `main`. Run `docker compose up -d` to pull updates. Replace your copied Compose file when its settings change. Back up `workspaces/` and the named home volume; `docker compose down -v` deletes that volume. Do not mount the Docker socket or expose the editor without authentication. [Troubleshooting](docs/guide.md#updates-troubleshooting-and-security).
+`latest` follows full releases; `nightly` follows successful merges to `main`. Run `docker compose up -d` to pull updates, and replace your copied Compose file when its settings change. Back up both `workspaces/` and the named home volume; `docker compose down -v` deletes the home volume. Do not mount the Docker socket or expose the editor without authentication. [Troubleshooting](docs/guide.md#updates-troubleshooting-and-security).
 
 Original project code is [Apache 2.0 licensed](LICENSE). See [Contributing](CONTRIBUTING.md), [Security](SECURITY.md), the [Code of Conduct](CODE_OF_CONDUCT.md), and [repository settings](docs/repository-settings.md).
 

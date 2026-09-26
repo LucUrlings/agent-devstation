@@ -1,6 +1,8 @@
 services:
   agent-devstation:
     image: ghcr.io/lucurlings/agent-devstation:${AGENT_DEVSTATION_TAG:-latest}
+    hostname: agent-devspace
+    container_name: agent-devspace
     pull_policy: always
     init: true
     # To use Codex's Linux sandbox and phone Remote Control, follow the
@@ -20,7 +22,7 @@ services:
       AGENT_DEVSTATION_UID: ${AGENT_DEVSTATION_UID-1000}
       AGENT_DEVSTATION_GID: ${AGENT_DEVSTATION_GID-1000}
     volumes:
-      - ./workspaces:/workspaces
+      - ./workspaces:/home/dev/workspaces
       - devstation-home:/home/dev
     # Port 8080 serves only the optional code-server browser editor.
     # Uncomment for local editor access; agents expose no HTTP port.
