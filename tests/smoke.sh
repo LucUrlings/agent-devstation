@@ -7,9 +7,25 @@ java_name="devstation-java-smoke-$$"
 cache_volume="devstation-cache-smoke-$$"
 codex_name="devstation-codex-smoke-$$"
 codex_volume="devstation-codex-home-smoke-$$"
-trap 'docker rm -f "$name" "$java_name" "$codex_name" >/dev/null 2>&1 || true; docker volume rm "$cache_volume" "$codex_volume" >/dev/null 2>&1 || true' EXIT
+workspace_volume="devstation-workspace-smoke-$$"
+trap 'docker rm -f "$name" "$java_name" "$codex_name" >/dev/null 2>&1 || true; docker volume rm "$cache_volume" "$codex_volume" "$workspace_volume" >/dev/null 2>&1 || true' EXIT
 
 bash tests/codex-wrapper.sh
+
+# Compose can create ./workspaces as an empty root-owned bind source on Linux.
+# The image must make that mount writable without taking over existing files.
+docker volume create "$workspace_volume" >/dev/null
+docker run --rm --mount "type=volume,src=$workspace_volume,dst=/workspaces,volume-nocopy" --entrypoint bash "$image" -lc \
+  'chown root:root /workspaces; chmod 755 /workspaces'
+docker run --rm --mount "type=volume,src=$workspace_volume,dst=/workspaces,volume-nocopy" "$image" bash -lc \
+  'test "$HOME" = /home/dev && test -w "$HOME" && test -w /workspaces && git init -q --bare /tmp/smoke-origin.git && git clone -q /tmp/smoke-origin.git /workspaces/Watchtower && test -d /workspaces/Watchtower/.git'
+docker run --rm --mount "type=volume,src=$workspace_volume,dst=/workspaces,volume-nocopy" --entrypoint bash "$image" -lc \
+  'chown root:root /workspaces'
+if output=$(docker run --rm --mount "type=volume,src=$workspace_volume,dst=/workspaces,volume-nocopy" "$image" true 2>&1); then
+  echo 'Nonempty root-owned workspace was accepted unexpectedly' >&2
+  exit 1
+fi
+[[ "$output" == *'/workspaces is not writable by dev'* ]] || { echo "$output" >&2; exit 1; }
 
 # A home volume created by an older image can contain root-owned uv cache files
 # even when the cache directory itself belongs to dev.
