@@ -4,15 +4,20 @@
 
 A ready-to-run Docker workspace with **Codex**, **Claude Code**, and **GitHub CLI**. Add projects under `/workspaces`; both agents and the optional browser editor see the same files and selected SDKs. Prebuilt images support Linux AMD64 and ARM64. You never need to build one.
 
-## Quick start
+## Choose a setup
 
-1. Install Docker with Compose. Copy [compose.yaml](compose.yaml) into a directory on your server; it is the only setup file.
-2. Start the prebuilt image; Compose pulls it automatically and does not build it:
+| Feature | Simple | Full |
+| --- | --- | --- |
+| Codex | Terminal CLI with full access inside the container | Normal Codex sandbox and background server |
+| Extra host setup | None | May need user-namespace setup |
+| Phone Remote Control | Claude Code only | Claude Code and Codex, subject to account availability |
 
-   ```sh
-   docker compose up -d
-   ```
+Both use the same image and [compose.yaml](compose.yaml). No clone or image build is needed.
 
+## Install (both setups)
+
+1. Install Docker Engine with Compose, then copy [compose.yaml](compose.yaml) to a folder on your server. For the **full** setup, uncomment its three `security_opt` lines before starting.
+2. Run `docker compose up -d` in that folder. Compose pulls the prebuilt image.
 3. Sign in to either or both agents:
 
    ```sh
@@ -20,19 +25,53 @@ A ready-to-run Docker workspace with **Codex**, **Claude Code**, and **GitHub CL
    docker compose exec -u dev agent-devstation claude auth login
    ```
 
-4. Add a project and run an agent from it:
+   Use only the login you need. [API-key login options](docs/guide.md#authentication) are also available; login state persists in the home volume.
+
+4. Add a project (or use one already under `/workspaces`). Compose creates the local `workspaces/` folder automatically:
 
    ```sh
    docker compose exec -u dev agent-devstation git clone https://github.com/you/project.git /workspaces/project
-   docker compose exec -u dev -w /workspaces/project agent-devstation codex --no-daemon --sandbox danger-full-access
-   docker compose exec -u dev -w /workspaces/project agent-devstation claude
    ```
 
-Use `docker compose exec -u dev agent-devstation bash` for a shell. [Authentication options](docs/guide.md#authentication) include ChatGPT or an OpenAI API key for Codex, and a Claude subscription or Anthropic API key for Claude Code. Agent login state persists in the named `/home/dev` volume; projects live in the `./workspaces` bind mount.
+For a shell, run `docker compose exec -u dev agent-devstation bash`.
 
-The Codex command gives it full access **inside the container** and skips phone Remote Control. For Codex's normal sandbox and phone access, see the [sandboxed setup](docs/guide.md#codex-sandboxed-setup) and [OpenAI's permissions guide](https://learn.chatgpt.com/docs/sandboxing?surface=cli#how-permissions-work).
+## Simple setup: terminal agents
 
-## Configure
+Use the unchanged Compose file. Run either agent from a project:
+
+```sh
+docker compose exec -u dev -w /workspaces/project agent-devstation codex --no-daemon --sandbox danger-full-access
+docker compose exec -u dev -w /workspaces/project agent-devstation claude
+```
+
+`--no-daemon` avoids host namespace setup but disables **Codex** phone Remote Control. `danger-full-access` gives Codex full access as `dev` inside the container, including saved logins. Docker still controls host mounts. [OpenAI's permissions guide](https://learn.chatgpt.com/docs/sandboxing?surface=cli#how-permissions-work).
+
+## Full setup: sandbox and phone
+
+After enabling `security_opt` in step 1, check Codex's sandbox:
+
+```sh
+docker compose exec -u dev agent-devstation codex sandbox -c 'sandbox_mode="read-only"' /bin/sh -lc 'cd "$HOME" && pwd -P'
+```
+
+It should print `/home/dev`. If it fails, follow the [host instructions](docs/guide.md#codex-sandboxed-setup) and [OpenAI's prerequisites](https://learn.chatgpt.com/docs/sandboxing?surface=cli#prerequisites); Ubuntu 24.04 may need a one-time AppArmor profile **on the host**. The image includes `bubblewrap`. The Compose options disable Docker's seccomp and container AppArmor filters for this service.
+
+Run normal Codex from your project:
+
+```sh
+docker compose exec -u dev -w /workspaces/project agent-devstation codex
+```
+
+For phone control, start its background server in another shell, then pair:
+
+```sh
+docker compose exec -u dev agent-devstation codex remote-control start
+docker compose exec -u dev agent-devstation codex remote-control pair
+```
+
+Headless Codex pairing is experimental and depends on your ChatGPT account and phone UI. [Phone setup and limitations](docs/guide.md#official-phone-remote-control). Claude Code works as shown in the simple setup. Switching setups later keeps projects and logins; run `docker compose up -d` to apply the Compose change.
+
+## SDKs and editor (either setup)
 
 The [included Compose file](compose.yaml) is the complete example. It selects Python `3.14` and Node.js `24`; other SDKs and the editor are off. Put overrides in an ignored `.env` beside Compose:
 
@@ -49,11 +88,11 @@ An empty value disables an SDK, including either default. A partial version sele
 
 Set `AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=true` and `AGENT_DEVSTATION_VSCODE_PASSWORD` to enable code-server on **container port 8080**. Uncomment the loopback port mapping in Compose for local browser access. For remote access, use your own reverse proxy with TLS and authentication. The editor shares `/workspaces` and the SDKs; disabling it removes its installation. [Editor setup](docs/guide.md#browser-editor).
 
-On Linux, set `AGENT_DEVSTATION_UID` and `AGENT_DEVSTATION_GID` if project files are not owned by `1000:1000`. The image includes `bubblewrap` for the optional sandboxed path. The default Compose keeps Docker's security filters.
+On Linux, set `AGENT_DEVSTATION_UID` and `AGENT_DEVSTATION_GID` if project files are not owned by `1000:1000`. The default Compose keeps Docker's security filters.
 
 ## Phone Remote Control
 
-Neither agent needs a public port for its official phone Remote Control. Codex needs the [sandboxed setup](docs/guide.md#codex-sandboxed-setup) and ChatGPT login; headless pairing remains experimental. Claude Code needs an eligible subscription login, not just an API key. See [commands and limitations](docs/guide.md#official-phone-remote-control).
+Claude Code phone control works from either setup: run `docker compose exec -u dev -w /workspaces/project agent-devstation claude remote-control`. It needs an eligible Claude subscription login, not an API key alone. Codex uses the full setup above. Both use outbound connections; neither needs a public agent port. [Details](docs/guide.md#official-phone-remote-control).
 
 ## Updates and security
 

@@ -13,7 +13,7 @@ Start with the [README](../README.md) and copy the complete [compose.yaml](../co
 
 Set `AGENT_DEVSTATION_TAG=nightly` in an optional `.env` to use a new merged change before the next release. `pull_policy: always` checks GHCR on every `docker compose up -d`. Release tags promote an already tested `main` image; they do not rebuild it. If an anonymous pull is denied, the GHCR package may need its visibility set to **Public**.
 
-## Complete Compose configuration
+## Compose and projects
 
 The linked [compose.yaml](../compose.yaml) is the complete one-file example. It mounts `./workspaces` for projects and a named volume at `/home/dev` for logins and settings. Both agents and the optional editor see the same files and SDKs. Do not use `docker compose down -v` unless you want to delete the home volume.
 
@@ -37,7 +37,16 @@ For Codex's normal sandbox and phone Remote Control, uncomment `security_opt` in
 docker compose exec -u dev agent-devstation codex sandbox -c 'sandbox_mode="read-only"' /bin/sh -lc 'cd "$HOME" && pwd -P'
 ```
 
-If it prints `/home/dev`, run plain `codex` from a project. If it fails, follow [OpenAI's Linux prerequisites](https://learn.chatgpt.com/docs/sandboxing?surface=cli#prerequisites) **on the Docker host**. Ubuntu 24.04 may need its `bwrap` AppArmor profile; other hosts have different namespace rules. Phone pairing still needs an account-based test.
+If it prints `/home/dev`, run plain `codex` from a project. If it fails with a user-namespace error on an **Ubuntu 24.04 Docker host**, load Ubuntu's `bwrap` AppArmor profile on the host:
+
+```sh
+sudo apt update
+sudo apt install apparmor-profiles apparmor-utils
+sudo install -m 0644 /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/bwrap-userns-restrict
+sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
+```
+
+Repeat the sandbox check afterward. On Ubuntu 26.04, the profile ships with `apparmor` at `/etc/apparmor.d/bwrap-userns-restrict`; load it there if needed. Debian and Fedora may use different host rules. [OpenAI's Linux prerequisites](https://learn.chatgpt.com/docs/sandboxing?surface=cli#prerequisites) explain the host requirements. The image cannot override a host namespace restriction.
 
 ## SDK selection
 
