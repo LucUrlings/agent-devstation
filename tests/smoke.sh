@@ -12,6 +12,17 @@ trap 'docker rm -f "$name" "$java_name" "$codex_name" >/dev/null 2>&1 || true; d
 
 bash tests/codex-wrapper.sh
 
+# ChatGPT Remote's iOS folder picker resolves $HOME through an explicit
+# read-only Codex sandbox. Docker's default seccomp policy blocks bubblewrap
+# before the directory can be checked; the shipped profile must permit it.
+test "$(docker run --rm --security-opt "seccomp=$PWD/seccomp-codex.json" "$image" \
+  codex sandbox -c 'sandbox_mode="read-only"' /bin/sh -lc 'cd "$HOME" && pwd -P')" = /home/dev
+if docker run --rm --security-opt "seccomp=$PWD/seccomp-codex.json" "$image" \
+  codex sandbox -c 'sandbox_mode="read-only"' /bin/sh -lc 'touch /workspaces/codex-read-only-probe' >/dev/null 2>&1; then
+  echo 'Codex read-only sandbox allowed a workspace write' >&2
+  exit 1
+fi
+
 # Compose can create ./workspaces as an empty root-owned bind source on Linux.
 # The image must make that mount writable without taking over existing files.
 docker volume create "$workspace_volume" >/dev/null

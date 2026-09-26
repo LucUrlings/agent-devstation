@@ -57,3 +57,4 @@ jobs:
           cache-from: type=gha,scope=agent-devstation-arm64
           cache-to: type=gha,scope=agent-devstation-arm64,mode=min,ignore-error=true
       - run: docker run --rm agent-devstation:ci bash -lc 'codex --version && claude --version && gh --version && code-server --version'
+      - run: test "$(docker run --rm --security-opt "seccomp=$PWD/seccomp-codex.json" agent-devstation:ci codex sandbox -c 'sandbox_mode="read-only"' /bin/sh -lc 'cd "$HOME" && pwd -P')" = /home/dev
