@@ -55,7 +55,9 @@ for generation in 1 2; do
     touch /home/dev/.codex/.agent-devstation-remote-control-enabled
   '
   else
-    docker exec -u dev "$codex_name" bash -lc '
+    # This polling shell exits explicitly; use a non-login shell so Ubuntu's
+    # logout hook cannot replace its success status under set -e.
+    docker exec -u dev "$codex_name" bash -c '
       set -euo pipefail
       for _ in $(seq 1 60); do
         test -S /home/dev/.codex/app-server-control/app-server-control.sock && exit 0
