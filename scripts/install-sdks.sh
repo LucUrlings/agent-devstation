@@ -10,7 +10,12 @@ fetch() {
 }
 
 valid_version() {
-  [[ "$1" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]
+  local name=$1 version=$2
+  if [[ "$name" == java ]]; then
+    [[ "$version" =~ ^[0-9]+(\.[0-9]+){0,3}$ ]]
+  else
+    [[ "$version" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]
+  fi
 }
 
 requested_prefix() {
@@ -84,13 +89,24 @@ install_dotnet() {
 }
 
 install_java() {
-  local major arch
+  local major arch link upper last
   major=${1%%.*}
   arch=$(dpkg --print-architecture)
   [[ "$arch" == amd64 ]] && arch=x64
   [[ "$arch" == arm64 ]] && arch=aarch64
   mkdir -p "$sdk_root/java/$1"
-  fetch "https://api.adoptium.net/v3/binary/latest/${major}/ga/linux/${arch}/jdk/hotspot/normal/eclipse" -o /tmp/devstation-java.tar.gz
+  if [[ "$1" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    fetch "https://api.adoptium.net/v3/binary/latest/${major}/ga/linux/${arch}/jdk/hotspot/normal/eclipse" -o /tmp/devstation-java.tar.gz
+  else
+    # The API's exact version endpoint requires a Maven-style range. Filter
+    # its results because the range can also contain a four-part update.
+    last=${1##*.}
+    upper="${1%.*}.$((10#$last + 1))"
+    link=$(fetch "https://api.adoptium.net/v3/assets/version/%5B${1}%2C${upper}%29?architecture=${arch}&image_type=jdk&os=linux&release_type=ga&vendor=eclipse&page_size=20" \
+      | jq -r --arg version "$1" '[.[] | select((.version_data.openjdk_version | split("+")[0] | split("-")[0]) == $version) | .binaries[] | .package.link][0] // empty')
+    [[ -n "$link" ]] || { echo "No Java release matches $1" >&2; return 1; }
+    fetch "$link" -o /tmp/devstation-java.tar.gz
+  fi
   tar -xzf /tmp/devstation-java.tar.gz --strip-components=1 -C "$sdk_root/java/$1"
   rm /tmp/devstation-java.tar.gz
   ln -s "$1" "$sdk_root/java/current"
@@ -131,17 +147,19 @@ declare -A requests=(
 for name in python node dotnet java go rust; do
   version=${requests[$name]}
   [[ -z "$version" ]] && continue
-  valid_version "$version" || { echo "Invalid AGENT_DEVSTATION_SDK_${name^^} version: $version" >&2; exit 2; }
-  if [[ "$name" == java && ! "$version" =~ ^[0-9]+$ ]]; then
-    echo 'AGENT_DEVSTATION_SDK_JAVA accepts a major version such as 21' >&2
-    exit 2
-  fi
+  valid_version "$name" "$version" || { echo "Invalid AGENT_DEVSTATION_SDK_${name^^} version: $version" >&2; exit 2; }
 done
 
 for name in python node dotnet java go rust; do
   version=${requests[$name]}
   [[ -z "$version" ]] && continue
-  current=$(installed_version "$name" || true)
+  # A binary can report its version before the rest of an archive is extracted.
+  # Treat only a fully verified installation as reusable after a restart.
+  complete_marker="$sdk_root/$name/.agent-devstation-complete"
+  current=''
+  if [[ -f "$complete_marker" ]]; then
+    current=$(installed_version "$name" || true)
+  fi
   if [[ -n "$current" ]] && matches "$current" "$version"; then
     echo "$name $current already installed"
     continue
@@ -158,5 +176,6 @@ for name in python node dotnet java go rust; do
   "install_$name" "$version"
   current=$(installed_version "$name")
   matches "$current" "$version" || { echo "$name installed $current, expected $version" >&2; exit 2; }
+  touch "$complete_marker"
   echo "$name $current ready"
 done

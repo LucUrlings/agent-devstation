@@ -3,8 +3,9 @@ set -euo pipefail
 
 image=${IMAGE:-agent-devstation:ci}
 name="devstation-smoke-$$"
+java_name="devstation-java-smoke-$$"
 cache_volume="devstation-cache-smoke-$$"
-trap 'docker rm -f "$name" >/dev/null 2>&1 || true; docker volume rm "$cache_volume" >/dev/null 2>&1 || true' EXIT
+trap 'docker rm -f "$name" "$java_name" >/dev/null 2>&1 || true; docker volume rm "$cache_volume" >/dev/null 2>&1 || true' EXIT
 
 # A home volume created by an older image can contain root-owned uv cache files
 # even when the cache directory itself belongs to dev.
@@ -31,6 +32,19 @@ if docker run --rm -e AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=true "$image" true 
   echo 'Editor started without a password unexpectedly' >&2
   exit 1
 fi
+
+# Temurin's range API can return 21.0.12.1 when asked for 21.0.12. Verify
+# that an exact selector picks the requested numeric release.
+docker run -d --name "$java_name" -e AGENT_DEVSTATION_SDK_JAVA=21.0.12 "$image" >/dev/null
+ready=false
+for _ in $(seq 1 120); do
+  if docker logs "$java_name" 2>&1 | grep '^java 21.0.12 ready$' >/dev/null; then ready=true; break; fi
+  if [[ $(docker inspect -f '{{.State.Running}}' "$java_name") != true ]]; then docker logs "$java_name"; exit 1; fi
+  sleep 2
+done
+[[ "$ready" == true ]] || { docker logs "$java_name"; exit 1; }
+docker exec -u dev "$java_name" bash -lc 'java -version 2>&1 | grep -q "^openjdk version \"21.0.12\""'
+docker rm -f "$java_name" >/dev/null
 
 docker run -d --name "$name" \
   -e AGENT_DEVSTATION_SDK_PYTHON=3.14 -e AGENT_DEVSTATION_SDK_NODE=24 -e AGENT_DEVSTATION_SDK_DOTNET=10 \
@@ -91,6 +105,20 @@ done
 repairs=$(docker logs "$name" 2>&1 | grep -c '^Removing incomplete node installation$')
 [[ "$repairs" -ge 2 ]] || { echo 'Missing-current recovery did not clear the partial SDK' >&2; exit 1; }
 docker exec -u dev "$name" bash -lc 'test -w /opt/sdk/node/current/bin && test -w /opt/sdk/node/current/lib/node_modules'
+
+# Go can still report its version when extraction stopped before its source
+# tree was complete. Without the completion marker, startup must reinstall it.
+docker exec -u root "$name" mv /opt/sdk/go/current/src /opt/sdk/go/current/src.incomplete
+docker exec -u root "$name" mv /opt/sdk/go/.agent-devstation-complete /opt/sdk/go/.agent-devstation-incomplete
+docker restart "$name" >/dev/null
+recovered=false
+for _ in $(seq 1 60); do
+  if docker exec -u dev "$name" bash -lc 'test -d /opt/sdk/go/current/src && test -f /opt/sdk/go/.agent-devstation-complete && go version' >/dev/null 2>&1; then recovered=true; break; fi
+  if [[ $(docker inspect -f '{{.State.Running}}' "$name") != true ]]; then docker logs "$name"; exit 1; fi
+  sleep 2
+done
+[[ "$recovered" == true ]] || { docker logs "$name"; exit 1; }
+docker logs "$name" 2>&1 | grep '^Removing incomplete go installation$' >/dev/null
 
 docker rm -f "$name" >/dev/null
 docker run -d --name "$name" "$image" >/dev/null

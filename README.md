@@ -82,7 +82,7 @@ volumes:
 
 The included Compose file selects Python `3.14` and Node.js `24` by default. The other SDKs are off. To change a selection, create an optional `.env` beside `compose.yaml`. Set `AGENT_DEVSTATION_SDK_PYTHON=` or `AGENT_DEVSTATION_SDK_NODE=` to disable either default. An empty value turns any SDK off. When running the image without this Compose file, unset SDK variables select none.
 
-Use plain numeric versions: `24` follows the latest Node.js 24 release, `3.13` follows the latest Python 3.13 patch, and `24.0.1` requests that exact Node.js release. The `.x` spelling is not accepted. Java accepts a major only because the Temurin installer selects its latest patch. A partial version resolves when the SDK is installed; a normal restart reuses the installed version. For a reproducible SDK patch, use all three numbers where the upstream installer supports exact versions.
+Use plain numeric versions: `24` follows the latest Node.js 24 release, `3.13` follows the latest Python 3.13 patch, and `24.0.1` requests that exact Node.js release. The `.x` spelling is not accepted. A partial version resolves when the SDK is installed; a normal restart reuses the installed version. For a reproducible SDK patch, use all three numbers where the upstream installer supports exact versions. Java can also have a four-part version, such as `21.0.12.1`.
 
 Rust's `1` follows its current stable channel and verifies the compiler is still major 1; use `1.85` to stay on a specific minor line. Other bare major values select the latest release in that major when the upstream installer provides one.
 
@@ -91,15 +91,15 @@ Rust's `1` follows its current stable channel and verifies the compiler is still
 | `AGENT_DEVSTATION_SDK_PYTHON` | `3.14` (default), `3.14.2` | `python`, `python3`, `pip3` |
 | `AGENT_DEVSTATION_SDK_NODE` | `24` (default), `24.1`, `24.1.0` | `node`, `npm`, `npx`, `corepack` |
 | `AGENT_DEVSTATION_SDK_DOTNET` | `10`, `10.0`, `10.0.100` | `dotnet` |
-| `AGENT_DEVSTATION_SDK_JAVA` | `21` | `java`, `javac` |
+| `AGENT_DEVSTATION_SDK_JAVA` | `21`, `21.0.12`, `21.0.12.1` | `java`, `javac` |
 | `AGENT_DEVSTATION_SDK_GO` | `1.26`, `1.26.1` | `go`, `gofmt` |
 | `AGENT_DEVSTATION_SDK_RUST` | `1.85`, `1.85.1` | `rustc`, `cargo`, `rustup` |
 
-Startup validates all values before downloads, checks installed versions, and installs only missing selections into `/opt/sdk/<language>/`. If a download or extraction was interrupted, the next start removes that SDK's incomplete directory and retries, including when the `current` link was never created. The image `PATH` includes stable `current` links there. `DOTNET_ROOT`, `JAVA_HOME`, `GOROOT`, `GOPATH`, `CARGO_HOME`, and `RUSTUP_HOME` are fixed in the image environment. Thus commands and required variables are available to agents, Compose shells, and the editor terminal. Codex, Claude Code, and code-server have separate dependencies; code-server's bundled Node is not on the user `PATH`. The startup script does not claim an SDK absent just because it was unselected; CI checks the actual commands.
+Startup validates all values before downloads, checks installed versions, and installs only missing selections into `/opt/sdk/<language>/`. It marks an SDK complete only after installation and version verification. If a download or extraction was interrupted, the next start removes that SDK's incomplete directory and retries, even when its version command already works or the `current` link was never created. The image `PATH` includes stable `current` links there. `DOTNET_ROOT`, `JAVA_HOME`, `GOROOT`, `GOPATH`, `CARGO_HOME`, and `RUSTUP_HOME` are fixed in the image environment. Thus commands and required variables are available to agents, Compose shells, and the editor terminal. Codex, Claude Code, and code-server have separate dependencies; code-server's bundled Node is not on the user `PATH`. The startup script does not claim an SDK absent just because it was unselected; CI checks the actual commands.
 
 Changing an SDK variable changes Compose configuration. Run `docker compose up -d` to **recreate** the container. This discards its writable SDK layer, so exactly the new selection is installed. `docker compose restart` retains the container and skips downloads, but does not apply changed configuration. `docker compose down` removes the container but preserves the home volume and bind-mounted projects; avoid `down -v` unless you mean to delete login state. A recreated container downloads selected SDKs again; no SDK volume retains a deselected runtime. With `pull_policy: always`, Compose checks for an updated image on each `up -d`; it needs registry access even when a local image exists. A newly pulled image also causes recreation.
 
-First installation needs outbound HTTPS. Python uses Astral uv managed distributions; Node.js comes from nodejs.org; .NET from Microsoft; Java from Eclipse Temurin; Go from go.dev; Rust from rustup. An unavailable version fails startup rather than silently selecting another major. Java selects the latest Temurin patch for the requested major, so use a major such as `21`.
+First installation needs outbound HTTPS. Python uses Astral uv managed distributions; Node.js comes from nodejs.org; .NET from Microsoft; Java from Eclipse Temurin; Go from go.dev; Rust from rustup. An unavailable version fails startup rather than silently selecting another major. Java `21` or `21.0` selects the latest Temurin 21 patch; `21.0.12` or `21.0.12.1` selects that exact numeric release.
 
 ## Authentication
 
@@ -151,7 +151,7 @@ For remote access, connect your own reverse proxy to the editor on **container p
 
 Set `AGENT_DEVSTATION_TAG` to a version tag for a fixed release, to `nightly` for the newest successful merge, or leave it unset to follow `latest`. Run `docker compose up -d` to check GHCR and start the selected tag; `pull_policy: always` makes a separate `docker compose pull` optional. A new image recreates the container and reinstalls the selected SDKs. Back up both the named home volume and `workspaces/`. Partial SDK versions resolve again at recreation.
 
-If upgrading from a Compose file whose service was named `devstation`, run `docker compose down` with that old file before replacing it, then `docker compose up -d` with the new file. If already replaced, run `docker compose up -d --remove-orphans` to remove the old service container. The `devstation-home` volume name is retained to preserve agent logins. Do not use `down -v` during this migration.
+If upgrading from a Compose file whose service was named `devstation`, run `docker compose down` with that old file before replacing it, then `docker compose up -d` with the new file. If already replaced, run `docker compose up -d --remove-orphans` to remove the old service container. The `devstation-home` volume name is retained to preserve agent logins when you keep the same Compose project name and directory. Moving the Compose file to a different directory changes the default project name and creates a different named volume unless you set the same project name explicitly. Do not use `down -v` during this migration.
 
 On the first start with this image, the entrypoint also repairs ownership of cache files left by older images in the persisted home volume. Later restarts skip that recursive cache pass.
 
