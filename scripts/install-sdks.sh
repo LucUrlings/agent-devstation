@@ -10,11 +10,11 @@ fetch() {
 }
 
 valid_version() {
-  [[ "$1" =~ ^[0-9]+(\.[0-9]+){0,2}(\.x)?$ ]]
+  [[ "$1" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]
 }
 
 requested_prefix() {
-  printf '%s' "${1%.x}"
+  printf '%s' "$1"
 }
 
 matches() {
@@ -72,7 +72,7 @@ install_dotnet() {
   local version=$1
   fetch https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
   mkdir -p "$sdk_root/dotnet/current"
-  if [[ "$version" =~ ^[0-9]+(\.[0-9]+)?(\.x)?$ ]]; then
+  if [[ "$version" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
     local channel
     channel=$(requested_prefix "$version")
     [[ "$channel" == *.* ]] || channel="$channel.0"
@@ -109,24 +109,31 @@ install_go() {
 }
 
 install_rust() {
+  local toolchain=$1
+  # rustup has no major-only release channel. Its stable channel supplies the
+  # current major, and the post-install version check rejects a mismatch.
+  [[ "$toolchain" =~ ^[0-9]+$ ]] && toolchain=stable
   mkdir -p "$CARGO_HOME" "$RUSTUP_HOME"
   fetch https://sh.rustup.rs -o /tmp/rustup-init.sh
-  HOME=/root sh /tmp/rustup-init.sh -y --no-modify-path --profile default --default-toolchain "$(requested_prefix "$1")"
+  HOME=/root sh /tmp/rustup-init.sh -y --no-modify-path --profile default --default-toolchain "$toolchain"
   rm /tmp/rustup-init.sh
 }
 
 declare -A requests=(
-  [python]="${SDK_PYTHON:-}" [node]="${SDK_NODE:-}"
-  [dotnet]="${SDK_DOTNET:-}" [java]="${SDK_JAVA:-}"
-  [go]="${SDK_GO:-}" [rust]="${SDK_RUST:-}"
+  [python]="${AGENT_DEVSTATION_SDK_PYTHON-${SDK_PYTHON-}}"
+  [node]="${AGENT_DEVSTATION_SDK_NODE-${SDK_NODE-}}"
+  [dotnet]="${AGENT_DEVSTATION_SDK_DOTNET-${SDK_DOTNET-}}"
+  [java]="${AGENT_DEVSTATION_SDK_JAVA-${SDK_JAVA-}}"
+  [go]="${AGENT_DEVSTATION_SDK_GO-${SDK_GO-}}"
+  [rust]="${AGENT_DEVSTATION_SDK_RUST-${SDK_RUST-}}"
 )
 
 for name in python node dotnet java go rust; do
   version=${requests[$name]}
   [[ -z "$version" ]] && continue
-  valid_version "$version" || { echo "Invalid SDK_${name^^} version: $version" >&2; exit 2; }
+  valid_version "$version" || { echo "Invalid AGENT_DEVSTATION_SDK_${name^^} version: $version" >&2; exit 2; }
   if [[ "$name" == java && ! "$version" =~ ^[0-9]+$ ]]; then
-    echo 'SDK_JAVA accepts a major version such as 21' >&2
+    echo 'AGENT_DEVSTATION_SDK_JAVA accepts a major version such as 21' >&2
     exit 2
   fi
 done

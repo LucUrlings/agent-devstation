@@ -1,22 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-case "${VSCODE_EDITOR_ENABLED:-false}" in
+editor_enabled=${AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED-${VSCODE_EDITOR_ENABLED-false}}
+editor_password=${AGENT_DEVSTATION_VSCODE_PASSWORD-${VSCODE_PASSWORD-${PASSWORD-}}}
+dev_uid=${AGENT_DEVSTATION_UID-${DEV_UID-1000}}
+dev_gid=${AGENT_DEVSTATION_GID-${DEV_GID-1000}}
+
+case "$editor_enabled" in
   true|false) ;;
-  *) echo 'VSCODE_EDITOR_ENABLED must be true or false' >&2; exit 2 ;;
+  *) echo 'AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED must be true or false' >&2; exit 2 ;;
 esac
 
-if [[ "${VSCODE_EDITOR_ENABLED:-false}" == true && -z "${PASSWORD:-}" ]]; then
-  echo 'EDITOR_PASSWORD (passed as PASSWORD) is required when the editor is enabled' >&2
+if [[ "$editor_enabled" == true && -z "$editor_password" ]]; then
+  echo 'AGENT_DEVSTATION_VSCODE_PASSWORD is required when the editor is enabled' >&2
   exit 2
 fi
 
-for value in "${DEV_UID:-1000}" "${DEV_GID:-1000}"; do
-  [[ "$value" =~ ^[1-9][0-9]*$ ]] || { echo 'DEV_UID and DEV_GID must be positive integers' >&2; exit 2; }
+for value in "$dev_uid" "$dev_gid"; do
+  [[ "$value" =~ ^[1-9][0-9]*$ ]] || { echo 'AGENT_DEVSTATION_UID and AGENT_DEVSTATION_GID must be positive integers' >&2; exit 2; }
 done
 
-if [[ "${DEV_GID:-1000}" != "$(id -g dev)" ]]; then groupmod -g "${DEV_GID:-1000}" dev; fi
-if [[ "${DEV_UID:-1000}" != "$(id -u dev)" ]]; then usermod -u "${DEV_UID:-1000}" dev; fi
+if [[ "$dev_gid" != "$(id -g dev)" ]]; then groupmod -g "$dev_gid" dev; fi
+if [[ "$dev_uid" != "$(id -u dev)" ]]; then usermod -u "$dev_uid" dev; fi
 if [[ "$(stat -c %u:%g /home/dev)" != "$(id -u dev):$(id -g dev)" ]]; then
   chown -R dev:dev /home/dev
 fi
@@ -42,8 +47,9 @@ if [[ $# -gt 0 ]]; then
   exec gosu dev "$@"
 fi
 
-if [[ "${VSCODE_EDITOR_ENABLED:-false}" == true ]]; then
-  exec gosu dev code-server --bind-addr 0.0.0.0:8080 --auth password /workspaces
+if [[ "$editor_enabled" == true ]]; then
+  # code-server uses PASSWORD internally; users configure the namespaced setting.
+  exec gosu dev env PASSWORD="$editor_password" code-server --bind-addr 0.0.0.0:8080 --auth password /workspaces
 fi
 
 exec gosu dev sleep infinity

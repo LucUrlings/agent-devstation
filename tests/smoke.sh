@@ -5,22 +5,31 @@ image=${IMAGE:-agent-devstation:ci}
 name="devstation-smoke-$$"
 trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
 
-docker run -d --name "$name" -e VSCODE_EDITOR_ENABLED=false "$image" >/dev/null
+docker run -d --name "$name" -e AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=false "$image" >/dev/null
 sleep 3
 docker exec -u dev "$name" bash -lc 'codex --version && claude --version && code-server --version'
 docker exec -u dev "$name" bash -lc 'for sdk in python python3 pip3 node npm npx corepack dotnet java javac go gofmt rustc cargo rustup; do if command -v "$sdk" >/dev/null; then echo "Unexpected SDK command: $sdk" >&2; exit 1; fi; done'
 docker exec -u dev "$name" bash -lc '! curl -s --max-time 1 -o /dev/null http://127.0.0.1:8080/'
 docker rm -f "$name" >/dev/null
 
+if docker run --rm -e AGENT_DEVSTATION_SDK_NODE=24.x "$image" true >/dev/null 2>&1; then
+  echo 'Version syntax accepted .x unexpectedly' >&2
+  exit 1
+fi
+if docker run --rm -e AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=true "$image" true >/dev/null 2>&1; then
+  echo 'Editor started without a password unexpectedly' >&2
+  exit 1
+fi
+
 docker run -d --name "$name" \
-  -e SDK_PYTHON=3.13 -e SDK_NODE=22.x -e SDK_DOTNET=10 \
-  -e SDK_JAVA=21 -e SDK_GO=1.24 -e SDK_RUST=1.85 \
-  -e VSCODE_EDITOR_ENABLED=true -e PASSWORD=smoke-only-password \
+  -e AGENT_DEVSTATION_SDK_PYTHON=3.14 -e AGENT_DEVSTATION_SDK_NODE=24 -e AGENT_DEVSTATION_SDK_DOTNET=10 \
+  -e AGENT_DEVSTATION_SDK_JAVA=21 -e AGENT_DEVSTATION_SDK_GO=1.24 -e AGENT_DEVSTATION_SDK_RUST=1.85 \
+  -e AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=true -e AGENT_DEVSTATION_VSCODE_PASSWORD=smoke-only-password \
   "$image" >/dev/null
 
 ready=false
 for _ in $(seq 1 180); do
-  if docker logs "$name" 2>&1 | grep -q 'rust .* ready'; then ready=true; break; fi
+  if docker logs "$name" 2>&1 | grep 'rust .* ready' >/dev/null; then ready=true; break; fi
   if [[ $(docker inspect -f '{{.State.Running}}' "$name") != true ]]; then docker logs "$name"; exit 1; fi
   sleep 10
 done
@@ -55,7 +64,7 @@ for _ in $(seq 1 60); do
   sleep 2
 done
 [[ "$recovered" == true ]] || { docker logs "$name"; exit 1; }
-docker logs "$name" 2>&1 | grep -q '^Removing incomplete node installation$'
+docker logs "$name" 2>&1 | grep '^Removing incomplete node installation$' >/dev/null
 
 docker rm -f "$name" >/dev/null
 docker run -d --name "$name" "$image" >/dev/null

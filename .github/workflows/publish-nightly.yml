@@ -79,6 +79,6 @@ jobs:
           main_sha=$(git ls-remote origin refs/heads/main | awk '{print $1}')
           if [[ "${main_sha}" == "${SOURCE_SHA}" ]]; then
             docker buildx imagetools create \
-              --tag "${IMAGE}:nightly-latest" \
+              --tag "${IMAGE}:nightly" \
               "${IMAGE}:nightly-${SOURCE_SHA}"
           fi
