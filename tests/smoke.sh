@@ -87,6 +87,15 @@ docker volume create "$nested_workspace_volume" >/dev/null
 docker run --rm --mount "type=volume,src=$nested_home_volume,dst=/home/dev" \
   --mount "type=volume,src=$nested_workspace_volume,dst=/home/dev/workspaces,volume-nocopy" "$image" bash -lc \
   'test "$PWD" = /home/dev/workspaces && test -w "$HOME/workspaces" && test -w "$HOME/.codex"'
+# Changing the dev UID must repair the home volume without taking ownership of
+# existing project files in the nested workspace mount.
+docker run --rm --mount "type=volume,src=$nested_workspace_volume,dst=/home/dev/workspaces,volume-nocopy" \
+  --entrypoint bash "$image" -lc \
+  'mkdir -p /home/dev/workspaces/project && touch /home/dev/workspaces/project/existing && chown -R 1000:1000 /home/dev/workspaces/project && chown 1234:1234 /home/dev/workspaces'
+docker run --rm -e AGENT_DEVSTATION_UID=1234 -e AGENT_DEVSTATION_GID=1234 \
+  --mount "type=volume,src=$nested_home_volume,dst=/home/dev" \
+  --mount "type=volume,src=$nested_workspace_volume,dst=/home/dev/workspaces,volume-nocopy" "$image" bash -lc \
+  'test "$(id -u):$(id -g)" = 1234:1234 && test -w "$HOME" && test -w "$HOME/workspaces" && test "$(stat -c %u:%g "$HOME/workspaces/project/existing")" = 1000:1000'
 
 # A home volume created by an older image can contain root-owned uv cache files
 # even when the cache directory itself belongs to dev.
