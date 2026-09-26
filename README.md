@@ -13,7 +13,6 @@ The publishing workflows build `linux/amd64` and `linux/arm64` images at `ghcr.i
 3. Start the selected image:
 
    ```sh
-   mkdir -p workspaces
    docker compose up -d
    docker compose logs -f agent-devstation
    ```
