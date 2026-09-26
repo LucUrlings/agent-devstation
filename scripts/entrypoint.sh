@@ -20,8 +20,8 @@ for value in "$dev_uid" "$dev_gid"; do
   [[ "$value" =~ ^[1-9][0-9]*$ ]] || { echo 'AGENT_DEVSTATION_UID and AGENT_DEVSTATION_GID must be positive integers' >&2; exit 2; }
 done
 
-if [[ "$dev_gid" != "$(id -g dev)" ]]; then groupmod -g "$dev_gid" dev; fi
-if [[ "$dev_uid" != "$(id -u dev)" ]]; then usermod -u "$dev_uid" dev; fi
+if [[ "$dev_gid" != "$(id -g dev)" ]]; then groupmod -o -g "$dev_gid" dev; fi
+if [[ "$dev_uid" != "$(id -u dev)" ]]; then usermod -o -u "$dev_uid" dev; fi
 if [[ "$(stat -c %u:%g /home/dev)" != "$(id -u dev):$(id -g dev)" ]]; then
   chown -R dev:dev /home/dev
 fi
