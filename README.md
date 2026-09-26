@@ -28,7 +28,7 @@ Run `docker compose exec -u dev agent-devstation bash` for a shell. The default 
 
 ## Full setup: editor and phone Remote Control
 
-This enables the browser editor and Codex's Linux sandbox so you can try **both agents' official phone workflows**. Codex phone pairing in a headless container is experimental and depends on your ChatGPT account and phone UI. Claude Code requires an eligible subscription account; an API key alone cannot enable its Remote Control.
+This enables the browser editor and Codex's Linux sandbox so you can use **either or both agents' official phone workflows**. Codex phone pairing in a headless container is experimental and depends on your ChatGPT account and phone UI. Claude Code requires an eligible subscription account; an API key alone cannot enable its Remote Control.
 
 1. Install Docker Engine with Compose. Save this complete example as `compose.yaml` in a folder on your server. Choose SDK versions you need; empty values leave those SDKs off.
 
@@ -64,7 +64,7 @@ This enables the browser editor and Codex's Linux sandbox so you can try **both 
    ```
 
 2. In the same folder, create a local `.env` containing `AGENT_DEVSTATION_VSCODE_PASSWORD=your-long-unique-password`, replacing the example value with a unique password. Keep it private and out of Git. Run `docker compose up -d`; first startup downloads the selected SDKs and editor. The password opens the editor's own login page; it is separate from agent accounts.
-3. Sign in to **both** agents with accounts eligible for their phone features, then add a project:
+3. Sign in to **one or both** agents, then add a project. Codex phone control needs ChatGPT sign-in; Claude phone control needs an eligible subscription sign-in.
 
    ```sh
    docker compose exec -u dev agent-devstation codex login --device-auth
@@ -72,9 +72,9 @@ This enables the browser editor and Codex's Linux sandbox so you can try **both 
    docker compose exec -u dev agent-devstation git clone https://github.com/you/project.git /workspaces/project
    ```
 
-   If you use GitHub CLI, also run `docker compose exec -u dev agent-devstation gh auth login`.
+   Run only the login commands you need. If you use GitHub CLI, also run `docker compose exec -u dev agent-devstation gh auth login`.
 
-4. Check the Codex sandbox:
+4. If you want Codex phone control, check its sandbox:
 
    ```sh
    docker compose exec -u dev agent-devstation codex sandbox -c 'sandbox_mode="read-only"' /bin/sh -lc 'cd "$HOME" && pwd -P'
@@ -82,7 +82,7 @@ This enables the browser editor and Codex's Linux sandbox so you can try **both 
 
    It should print `/home/dev`. If it fails with a user-namespace error, follow the [host setup steps](docs/guide.md#codex-sandboxed-setup) and [OpenAI's Linux prerequisites](https://learn.chatgpt.com/docs/sandboxing?surface=cli#prerequisites). Ubuntu 24.04 may need a one-time AppArmor profile on the Docker host. The image includes `bubblewrap`. The two `security_opt` settings relax Docker's seccomp and container AppArmor filters for this service.
 
-5. Start Codex Remote Control and pair the phone while signed in to the same ChatGPT account. Start Claude Code Remote Control from the project and open its URL or QR code; keep that command running while using it.
+5. Run the phone commands for whichever agent you use. Codex starts its background server and pairs while signed in to the same ChatGPT account. Claude Code shows a URL or QR code; keep its command running while using it.
 
    ```sh
    docker compose exec -u dev agent-devstation codex remote-control start
