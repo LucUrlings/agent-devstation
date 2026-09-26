@@ -146,13 +146,13 @@ for name in python node dotnet java go rust; do
     echo "$name $current already installed"
     continue
   fi
-  if [[ -e "$sdk_root/$name/current" || -L "$sdk_root/$name/current" ]]; then
-    if [[ -n "$current" ]]; then
-      echo "Installed $name version $current does not match $version; recreate the container" >&2
-      exit 2
-    fi
+  if [[ -n "$current" ]]; then
+    echo "Installed $name version $current does not match $version; recreate the container" >&2
+    exit 2
+  fi
+  if [[ -e "$sdk_root/$name" || -L "$sdk_root/$name" ]]; then
     echo "Removing incomplete $name installation"
-    rm -rf -- "$sdk_root/$name/current"
+    rm -rf -- "$sdk_root/$name"
   fi
   echo "Installing $name $version"
   "install_$name" "$version"

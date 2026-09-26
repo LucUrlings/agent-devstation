@@ -9,8 +9,8 @@ The publishing workflows build `linux/amd64` and `linux/arm64` images at `ghcr.i
 ## Quick start
 
 1. Install Docker Engine or Docker Desktop with Compose.
-2. Download [`compose.yaml`](compose.yaml) into one directory. It selects Python 3.14 and Node.js 24 by default; the other SDKs and the browser editor are off. Create an optional, ignored `.env` in that directory to change the choices.
-3. Start the latest full release:
+2. Download [`compose.yaml`](compose.yaml) into one directory. It selects Python 3.14 and Node.js 24 by default; the other SDKs and the browser editor are off. Create an optional, ignored `.env` in that directory to change the choices. If this Compose file is newer than the current full release, set `AGENT_DEVSTATION_TAG=nightly` in `.env` after its image publishes.
+3. Start the selected image:
 
    ```sh
    mkdir -p workspaces
@@ -33,10 +33,10 @@ There is no agent selector in Compose. Use `docker compose exec -u dev agent-dev
 | --- | --- |
 | `latest` | Newest full release; Compose default. |
 | `v0.1.0` (example) | A fixed full release. |
-| `nightly` | Newest successful merge to `main`; opt in with `AGENT_DEVSTATION_TAG=nightly`. |
-| `nightly-<commit SHA>` | The exact image from a `main` commit. |
+| `nightly` | Most recently promoted successful `main` build; opt in with `AGENT_DEVSTATION_TAG=nightly`. |
+| `nightly-<commit SHA>` | An image built from that `main` commit. |
 
-After CI passes for a push to `main`, the `Publish nightly image` workflow builds both architectures in parallel and publishes the nightly tags only after both builds succeed. The publishing workflow checks that the successful CI run came from this repository's `main` push and builds its exact commit; fork pull requests cannot trigger a publish job. The separate `Publish release image` workflow runs when a full GitHub release is published. Its tag, such as `v0.1.0`, must point to a commit on `main`; it promotes that commit's already built multi-platform image to the version tag and `latest` without rebuilding. Wait for the nightly workflow on `main` to finish before creating the release. `latest` does not move on ordinary merges.
+After CI passes for a push to `main`, the `Publish nightly image` workflow builds both architectures in parallel and publishes the commit-specific tag after both builds succeed. It updates `nightly` only if that commit is still the head of `main`, so an older build cannot replace a newer one. The publishing workflow checks that the successful CI run came from this repository's `main` push and builds its exact commit; fork pull requests cannot trigger a publish job. The separate `Publish release image` workflow runs when a full GitHub release is published. Its tag, such as `v0.1.0`, must point to a commit on `main`; it promotes that commit's already built multi-platform image to the version tag and `latest` without rebuilding. Wait for the nightly workflow on `main` to finish before creating the release. `latest` does not move on ordinary merges.
 
 When Compose settings change on `main`, use `AGENT_DEVSTATION_TAG=nightly` after that commit's nightly image is published until the next full release. The older `latest` image cannot understand settings introduced in a newer Compose file.
 
@@ -76,7 +76,7 @@ volumes:
   devstation-home:
 ```
 
-`init: true` adds a small PID 1 process that forwards stop signals and reaps child processes. The service does not need `stdin_open` or `tty`; `docker compose exec` attaches its own interactive terminal when you launch an agent. The `dev` account defaults to UID/GID 1000. On Linux, set `AGENT_DEVSTATION_UID` and `AGENT_DEVSTATION_GID` to the output of `id -u` and `id -g` if your bind-mounted projects use different ownership. Docker Desktop handles its usual bind mount mapping. These values identify a user, not a process ID; no PID setting is needed. The container starts as root to install system SDKs, then runs the editor and idle process as `dev`; agent examples explicitly use `-u dev`. It never mounts the Docker socket. `pull_policy: always` checks the registry on each `docker compose up -d`, including when the image tag is unchanged; a changed image recreates the container.
+`init: true` adds a small PID 1 process that forwards stop signals and reaps child processes. The service does not need `stdin_open` or `tty`; `docker compose exec` attaches its own interactive terminal when you launch an agent. The `dev` account defaults to UID/GID 1000. On Linux, set `AGENT_DEVSTATION_UID` and `AGENT_DEVSTATION_GID` to the output of `id -u` and `id -g` for the non-root user who owns your bind-mounted projects. If the projects are root-owned, change their ownership to a non-root user first; UID/GID 0 are rejected. Docker Desktop handles its usual bind mount mapping. These values identify a user, not a process ID; no PID setting is needed. The container starts as root to install system SDKs, then runs the editor and idle process as `dev`; agent examples explicitly use `-u dev`. It never mounts the Docker socket. `pull_policy: always` checks the registry on each `docker compose up -d`, including when the image tag is unchanged; a changed image recreates the container.
 
 ## SDK selection
 
@@ -95,7 +95,7 @@ Rust's `1` follows its current stable channel and verifies the compiler is still
 | `AGENT_DEVSTATION_SDK_GO` | `1.26`, `1.26.1` | `go`, `gofmt` |
 | `AGENT_DEVSTATION_SDK_RUST` | `1.85`, `1.85.1` | `rustc`, `cargo`, `rustup` |
 
-Startup validates all values before downloads, checks installed versions, and installs only missing selections into `/opt/sdk/<language>/`. If a download or extraction was interrupted, the next start removes the incomplete `current` installation and retries. The image `PATH` includes stable `current` links there. `DOTNET_ROOT`, `JAVA_HOME`, `GOROOT`, `GOPATH`, `CARGO_HOME`, and `RUSTUP_HOME` are fixed in the image environment. Thus commands and required variables are available to agents, Compose shells, and the editor terminal. Codex, Claude Code, and code-server have separate dependencies; code-server's bundled Node is not on the user `PATH`. The startup script does not claim an SDK absent just because it was unselected; CI checks the actual commands.
+Startup validates all values before downloads, checks installed versions, and installs only missing selections into `/opt/sdk/<language>/`. If a download or extraction was interrupted, the next start removes that SDK's incomplete directory and retries, including when the `current` link was never created. The image `PATH` includes stable `current` links there. `DOTNET_ROOT`, `JAVA_HOME`, `GOROOT`, `GOPATH`, `CARGO_HOME`, and `RUSTUP_HOME` are fixed in the image environment. Thus commands and required variables are available to agents, Compose shells, and the editor terminal. Codex, Claude Code, and code-server have separate dependencies; code-server's bundled Node is not on the user `PATH`. The startup script does not claim an SDK absent just because it was unselected; CI checks the actual commands.
 
 Changing an SDK variable changes Compose configuration. Run `docker compose up -d` to **recreate** the container. This discards its writable SDK layer, so exactly the new selection is installed. `docker compose restart` retains the container and skips downloads, but does not apply changed configuration. `docker compose down` removes the container but preserves the home volume and bind-mounted projects; avoid `down -v` unless you mean to delete login state. A recreated container downloads selected SDKs again; no SDK volume retains a deselected runtime. With `pull_policy: always`, Compose checks for an updated image on each `up -d`; it needs registry access even when a local image exists. A newly pulled image also causes recreation.
 

@@ -1,6 +1,5 @@
 /.env
 /.env.*
-!/sample.env
 /workspaces/
 /state/
 /secrets/

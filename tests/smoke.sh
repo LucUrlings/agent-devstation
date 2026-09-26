@@ -66,6 +66,20 @@ done
 [[ "$recovered" == true ]] || { docker logs "$name"; exit 1; }
 docker logs "$name" 2>&1 | grep '^Removing incomplete node installation$' >/dev/null
 
+# An interrupted install can also leave a version directory before the
+# current link is created. Startup must clear that partial directory.
+docker exec -u root "$name" rm /opt/sdk/node/current
+docker restart "$name" >/dev/null
+recovered=false
+for _ in $(seq 1 60); do
+  if docker exec -u dev "$name" npm --version >/dev/null 2>&1; then recovered=true; break; fi
+  if [[ $(docker inspect -f '{{.State.Running}}' "$name") != true ]]; then docker logs "$name"; exit 1; fi
+  sleep 2
+done
+[[ "$recovered" == true ]] || { docker logs "$name"; exit 1; }
+repairs=$(docker logs "$name" 2>&1 | grep -c '^Removing incomplete node installation$')
+[[ "$repairs" -ge 2 ]] || { echo 'Missing-current recovery did not clear the partial SDK' >&2; exit 1; }
+
 docker rm -f "$name" >/dev/null
 docker run -d --name "$name" "$image" >/dev/null
 sleep 3
