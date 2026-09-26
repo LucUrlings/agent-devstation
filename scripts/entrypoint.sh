@@ -76,7 +76,7 @@ rm -f -- /home/dev/.codex/app-server-control/app-server-control.sock
 
 # Installers run as root, but HOME belongs to dev in normal sessions. Keep
 # installer caches out of the persisted dev home.
-HOME=/root /usr/local/lib/agent-devstation/install-sdks.sh
+HOME=/root /usr/local/lib/agent-devstation/install-sdks.sh >&2
 chown dev:dev /opt/sdk
 for sdk_dir in /opt/sdk/*; do
   [[ -e "$sdk_dir" ]] || continue
@@ -93,12 +93,12 @@ if [[ -d /home/dev/.cache && ! -L /home/dev/.cache && ! -e /home/dev/.cache/.age
 fi
 
 if [[ "$editor_enabled" == true ]]; then
-  /usr/local/lib/agent-devstation/install-editor.sh
+  /usr/local/lib/agent-devstation/install-editor.sh >&2
 else
   if [[ -e /opt/code-server || -L /opt/code-server || -e /usr/local/bin/code-server || -L /usr/local/bin/code-server ]]; then
-    echo 'Uninstalling code-server (editor disabled)'
+    echo 'Uninstalling code-server (editor disabled)' >&2
   else
-    echo 'code-server disabled; not installed'
+    echo 'code-server disabled; not installed' >&2
   fi
   rm -f -- /usr/local/bin/code-server
   rm -rf -- /opt/code-server
