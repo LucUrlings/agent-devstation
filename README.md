@@ -18,7 +18,15 @@ The publishing workflows build `linux/amd64` and `linux/arm64` images at `ghcr.i
    docker compose logs -f agent-devstation
    ```
 
-4. Put repositories in `workspaces/`, for example `git clone https://github.com/you/project.git workspaces/project`. Run either agent from a project:
+4. Sign in to the agents you want to use. For a headless server, Codex can use a ChatGPT device code; Claude Code can use a claude.ai subscription:
+
+   ```sh
+   docker compose exec -u dev agent-devstation codex login --device-auth
+   docker compose exec -u dev agent-devstation claude auth login
+   ```
+
+   Follow the instructions each command prints in your browser. You can sign in to either agent independently. See [Authentication](#authentication) for API-key options and account requirements.
+5. Put repositories in `workspaces/`, for example `git clone https://github.com/you/project.git workspaces/project`. Run either agent from a project:
 
    ```sh
    docker compose exec -u dev -w /workspaces/project agent-devstation codex
