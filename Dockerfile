@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       sudo passwd tar unzip xz-utils zstd build-essential libicu78 libssl3t64 \
     && rm -rf /var/lib/apt/lists/* \
     && if id -u ubuntu >/dev/null 2>&1; then usermod -l dev -d /home/dev -m ubuntu && groupmod -n dev ubuntu; else useradd -m -u 1000 -s /bin/bash dev; fi \
-    && mkdir -p /workspaces /opt/sdk /home/dev/.codex /home/dev/.config /home/dev/.local \
+    && mkdir -p /workspaces /opt/sdk /home/dev/workspaces /home/dev/.codex /home/dev/.config /home/dev/.local \
     && chown -R dev:dev /workspaces /home/dev
 
 # GitHub's signed apt repository supplies the same gh command to all projects.
@@ -61,6 +61,6 @@ COPY scripts/entrypoint.sh scripts/install-sdks.sh scripts/install-editor.sh /us
 COPY scripts/codex.sh /usr/local/bin/codex
 RUN chmod 0755 /usr/local/lib/agent-devstation/*.sh /usr/local/bin/codex && chown -R dev:dev /home/dev
 
-WORKDIR /workspaces
+WORKDIR /home/dev/workspaces
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/lib/agent-devstation/entrypoint.sh"]
