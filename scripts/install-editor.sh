@@ -7,6 +7,12 @@ version=4.138.0
 root=/opt/code-server
 editor_bin="$root/bin/code-server"
 version_file="$root/.agent-devstation-version"
+stage=/opt/.agent-devstation-code-server-staging
+
+if [[ -e "$stage" || -L "$stage" ]]; then
+  echo 'Removing incomplete code-server download'
+  rm -rf -- "$stage"
+fi
 
 installed_version() {
   HOME=/root "$1" --version | awk '$1 ~ /^[0-9]+\.[0-9]+\.[0-9]+$/ { print $1; exit }'
@@ -35,7 +41,7 @@ case "$arch" in
   *) echo "Unsupported code-server architecture: $arch" >&2; exit 1 ;;
 esac
 
-stage=$(mktemp -d /opt/.code-server.XXXXXX)
+mkdir "$stage"
 trap 'rm -rf -- "$stage"' EXIT
 echo "Installing code-server $version"
 curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 \

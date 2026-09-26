@@ -134,9 +134,10 @@ done
 [[ "$ready" == true ]] || { docker logs "$name"; exit 1; }
 
 editor_ready=false
-for _ in $(seq 1 20); do
+for _ in $(seq 1 180); do
   if docker exec -u dev "$name" curl -s --max-time 2 -o /dev/null http://127.0.0.1:8080/; then editor_ready=true; break; fi
-  sleep 1
+  if [[ $(docker inspect -f '{{.State.Running}}' "$name") != true ]]; then docker logs "$name"; exit 1; fi
+  sleep 2
 done
 [[ "$editor_ready" == true ]] || { docker logs "$name"; exit 1; }
 
@@ -146,11 +147,16 @@ docker exec -i -u dev -e DOTNET_CLI_TELEMETRY_OPTOUT=1 "$name" bash -s < tests/s
 docker exec -u dev "$name" bash -lc 'curl -s -D - -o /dev/null http://127.0.0.1:8080/ | grep -qi "Location: ./login"'
 docker exec -u dev "$name" bash -lc 'curl -s -c /tmp/editor-cookie -o /dev/null -d password=smoke-only-password http://127.0.0.1:8080/login; curl -s -b /tmp/editor-cookie -D - -o /dev/null http://127.0.0.1:8080/ | grep -qi "Location: ./?folder=/workspaces"'
 
+# A hard interruption can leave extraction files beside an otherwise complete
+# editor installation. Startup must clear them without downloading again.
+docker exec -u root "$name" mkdir -p /opt/.agent-devstation-code-server-staging
 before=$(docker logs "$name" 2>&1 | grep -c '^Installing ')
 docker restart "$name" >/dev/null
 sleep 5
 after=$(docker logs "$name" 2>&1 | grep -c '^Installing ')
-[[ "$before" == "$after" ]] || { echo 'Restart downloaded an SDK again' >&2; exit 1; }
+[[ "$before" == "$after" ]] || { echo 'Restart downloaded an SDK or editor again' >&2; exit 1; }
+docker exec -u dev "$name" test ! -e /opt/.agent-devstation-code-server-staging
+docker logs "$name" 2>&1 | grep '^Removing incomplete code-server download$' >/dev/null
 docker logs "$name" 2>&1 | grep '^Found code-server .*; already installed$' >/dev/null
 
 # A failed download can leave the current path without a working command. The

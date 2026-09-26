@@ -74,6 +74,19 @@ if [[ -d "$codex_daemon_dir" ]]; then
 fi
 rm -f -- /home/dev/.codex/app-server-control/app-server-control.sock
 
+if [[ "$editor_enabled" == false ]]; then
+  # Remove the editor before SDK downloads, which may fail or take a while.
+  if [[ -e /opt/code-server || -L /opt/code-server \
+    || -e /opt/.agent-devstation-code-server-staging || -L /opt/.agent-devstation-code-server-staging \
+    || -e /usr/local/bin/code-server || -L /usr/local/bin/code-server ]]; then
+    echo 'Uninstalling code-server (editor disabled)' >&2
+  else
+    echo 'code-server disabled; not installed' >&2
+  fi
+  rm -f -- /usr/local/bin/code-server
+  rm -rf -- /opt/code-server /opt/.agent-devstation-code-server-staging
+fi
+
 # Installers run as root, but HOME belongs to dev in normal sessions. Keep
 # installer caches out of the persisted dev home.
 HOME=/root /usr/local/lib/agent-devstation/install-sdks.sh >&2
@@ -94,14 +107,6 @@ fi
 
 if [[ "$editor_enabled" == true ]]; then
   /usr/local/lib/agent-devstation/install-editor.sh >&2
-else
-  if [[ -e /opt/code-server || -L /opt/code-server || -e /usr/local/bin/code-server || -L /usr/local/bin/code-server ]]; then
-    echo 'Uninstalling code-server (editor disabled)' >&2
-  else
-    echo 'code-server disabled; not installed' >&2
-  fi
-  rm -f -- /usr/local/bin/code-server
-  rm -rf -- /opt/code-server
 fi
 
 if [[ $# -gt 0 ]]; then
