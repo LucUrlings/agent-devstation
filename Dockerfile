@@ -28,11 +28,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Official standalone Codex release. The installer is executed only at image build time.
 RUN curl -fsSL https://chatgpt.com/codex/install.sh -o /tmp/install-codex.sh \
     && HOME=/root CODEX_HOME=/opt/codex sh /tmp/install-codex.sh \
-    && ln -s /opt/codex/packages/standalone/current/bin/codex /usr/local/bin/codex \
     && ln -s /opt/codex/packages /home/dev/.codex/packages \
     && chown -R dev:dev /opt/codex /home/dev/.codex \
     && rm /tmp/install-codex.sh \
-    && codex --version
+    && /opt/codex/packages/standalone/current/bin/codex --version
 
 # Anthropic's signed stable apt repository keeps the CLI outside user SDK paths.
 RUN install -d -m 0755 /etc/apt/keyrings \
@@ -56,7 +55,8 @@ RUN curl -fsSL https://astral.sh/uv/install.sh -o /tmp/install-uv.sh \
     && uv --version
 
 COPY scripts/entrypoint.sh scripts/install-sdks.sh /usr/local/lib/agent-devstation/
-RUN chmod 0755 /usr/local/lib/agent-devstation/*.sh && chown -R dev:dev /home/dev
+COPY scripts/codex.sh /usr/local/bin/codex
+RUN chmod 0755 /usr/local/lib/agent-devstation/*.sh /usr/local/bin/codex && chown -R dev:dev /home/dev
 
 WORKDIR /workspaces
 EXPOSE 8080

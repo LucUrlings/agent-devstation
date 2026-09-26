@@ -9,6 +9,8 @@ codex_name="devstation-codex-smoke-$$"
 codex_volume="devstation-codex-home-smoke-$$"
 trap 'docker rm -f "$name" "$java_name" "$codex_name" >/dev/null 2>&1 || true; docker volume rm "$cache_volume" "$codex_volume" >/dev/null 2>&1 || true' EXIT
 
+bash tests/codex-wrapper.sh
+
 # A home volume created by an older image can contain root-owned uv cache files
 # even when the cache directory itself belongs to dev.
 docker volume create "$cache_volume" >/dev/null
