@@ -22,6 +22,14 @@ docker run --rm -e AGENT_DEVSTATION_UID=33 -e AGENT_DEVSTATION_GID=20 "$image" b
 docker run -d --name "$name" -e AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=false "$image" >/dev/null
 sleep 3
 docker exec -u dev "$name" bash -lc 'codex --version && claude --version && code-server --version'
+docker exec -u dev "$name" bash -lc '
+  set -euo pipefail
+  codex login --help | grep -- "--device-auth" >/dev/null
+  codex login --help | grep -- "--with-api-key" >/dev/null
+  codex remote-control --help | grep "pair" >/dev/null
+  claude auth --help | grep "login" >/dev/null
+  claude --help | grep -- "--remote-control" >/dev/null
+'
 docker exec -u dev "$name" bash -lc 'for sdk in python python3 pip3 node npm npx corepack dotnet java javac go gofmt rustc cargo rustup; do if command -v "$sdk" >/dev/null; then echo "Unexpected SDK command: $sdk" >&2; exit 1; fi; done'
 docker exec -u dev "$name" bash -lc '! curl -s --max-time 1 -o /dev/null http://127.0.0.1:8080/'
 docker rm -f "$name" >/dev/null
