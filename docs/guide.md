@@ -62,7 +62,7 @@ Codex's bubblewrap sandbox needs namespace and mount calls that [Docker's defaul
 
 ### Codex Linux sandbox host check
 
-The image installs Ubuntu's `bubblewrap` package, so there is no separate `bubblewrap` installation on the Docker host. The supplied Compose file also sets the container's seccomp and AppArmor options. After starting the container, check Codex's sandbox as `dev`:
+The image places Codex's bundled `bubblewrap` helper at `/usr/bin/bwrap`, where Ubuntu's host AppArmor profile expects it. There is no separate `bubblewrap` installation on the Docker host. The supplied Compose file also sets the container's seccomp and AppArmor options. After starting the container, check Codex's sandbox as `dev`:
 
 ```sh
 docker compose exec -u dev agent-devstation codex sandbox -c 'sandbox_mode="read-only"' /bin/sh -lc 'cd "$HOME" && pwd -P'

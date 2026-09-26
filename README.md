@@ -47,7 +47,7 @@ An empty value disables an SDK, including either default. A partial version sele
 
 Set `AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=true` and `AGENT_DEVSTATION_VSCODE_PASSWORD` to enable code-server on **container port 8080**. Uncomment the loopback port mapping in Compose for local browser access. For remote access, use your own reverse proxy with TLS and authentication. The editor shares `/workspaces` and the SDKs; disabling it removes its installation. [Editor setup](docs/guide.md#browser-editor).
 
-On Linux, set `AGENT_DEVSTATION_UID` and `AGENT_DEVSTATION_GID` if your project files are owned by IDs other than `1000:1000`. The image includes `bubblewrap`; no host install is normally needed. If the Codex sandbox or phone folder picker reports a namespace error, follow the [host check](docs/guide.md#codex-linux-sandbox-host-check). The Compose file uses `seccomp=unconfined` so Codex's sandbox can run; this disables Docker's seccomp filter for the container. See the [security boundary](docs/guide.md#complete-compose-configuration).
+On Linux, set `AGENT_DEVSTATION_UID` and `AGENT_DEVSTATION_GID` if your project files are owned by IDs other than `1000:1000`. The image includes Codex's bundled `bubblewrap` helper at `/usr/bin/bwrap`; no host install is normally needed. If the Codex sandbox or phone folder picker reports a namespace error, follow the [host check](docs/guide.md#codex-linux-sandbox-host-check). The Compose file uses `seccomp=unconfined` so Codex's sandbox can run; this disables Docker's seccomp filter for the container. See the [security boundary](docs/guide.md#complete-compose-configuration).
 
 ## Phone Remote Control
 
