@@ -8,7 +8,7 @@ The publishing workflows build `linux/amd64` and `linux/arm64` images at `ghcr.i
 
 ## Quick start
 
-1. Install Docker Engine or Docker Desktop with Compose.
+1. Install Docker Engine or Docker Desktop with Compose. On an Ubuntu 24.04 Docker host, complete the [bubblewrap host setup](#codex-linux-sandbox-host-setup) for Codex's sandbox and phone folder picker.
 2. Download [`compose.yaml`](compose.yaml) and [`seccomp-codex.json`](seccomp-codex.json) into the **same directory**. Both files are required for Codex's Linux sandbox and the phone folder picker. The Compose file selects Python 3.14 and Node.js 24 by default; the other SDKs and the browser editor are off. Create an optional, ignored `.env` in that directory to change the choices. If this Compose file is newer than the current full release, set `AGENT_DEVSTATION_TAG=nightly` in `.env` after its image publishes.
 3. Start the selected image:
 
@@ -90,7 +90,20 @@ volumes:
 
 `init: true` adds a small PID 1 process that forwards stop signals and reaps child processes. The service does not need `stdin_open` or `tty`; `docker compose exec` attaches its own interactive terminal when you launch an agent. The `dev` account defaults to UID/GID 1000. On Linux, set `AGENT_DEVSTATION_UID` and `AGENT_DEVSTATION_GID` to the output of `id -u` and `id -g` for the non-root user who owns your bind-mounted projects. UID/GID 0 are rejected. Docker Desktop handles its usual bind mount mapping. These values identify a user, not a process ID; no PID setting is needed. The container starts as root to install system SDKs, then runs the editor and idle process as `dev`; agent examples explicitly use `-u dev`. It never mounts the Docker socket. `pull_policy: always` checks the registry on each `docker compose up -d`, including when the image tag is unchanged; a changed image recreates the container.
 
-The seccomp file is based on [Docker's default profile](https://github.com/moby/profiles/blob/main/seccomp/default.json). It additionally permits `clone` and `unshare` when creating a user namespace, plus `mount`, `pivot_root`, and `umount2`, so Codex's bubblewrap sandbox can run inside Docker. On AppArmor hosts, Docker's default AppArmor policy can still deny the sandbox's mounts; `apparmor=unconfined` removes that container level AppArmor policy. This **reduces container isolation**. The service remains unprivileged with a seccomp filter, dropped Docker capabilities, and no Docker socket, but run it only with projects and users you trust. Keep the profile file paired with Compose when copying or updating the deployment. See [NOTICE](NOTICE) for source and license details. [Docker's seccomp documentation](https://docs.docker.com/engine/security/seccomp/) explains the syscall control.
+The seccomp file is based on [Docker's default profile](https://github.com/moby/profiles/blob/main/seccomp/default.json). It additionally permits `clone` and `unshare` when creating a user namespace, plus `mount`, `pivot_root`, and `umount2`, so Codex's bubblewrap sandbox can run inside Docker. On AppArmor hosts, Docker's default AppArmor policy can still deny the sandbox's mounts; `apparmor=unconfined` removes that container level AppArmor policy. This **reduces container isolation**. The service remains unprivileged with a seccomp filter, Docker's default capability limits, and no Docker socket, but run it only with projects and users you trust. Keep the profile file paired with Compose when copying or updating the deployment. See [NOTICE](NOTICE) for source and license details. [Docker's seccomp documentation](https://docs.docker.com/engine/security/seccomp/) explains the syscall control.
+
+### Codex Linux sandbox host setup
+
+On Ubuntu 24.04 Docker hosts, the kernel's AppArmor user namespace restriction can also block bubblewrap inside the container. [OpenAI recommends](https://learn.chatgpt.com/docs/sandboxing#prerequisites) loading Ubuntu's `bwrap-userns-restrict` profile. Run these commands **on the Docker host**, once:
+
+```sh
+sudo apt update
+sudo apt install apparmor-profiles apparmor-utils
+sudo install -m 0644 /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/bwrap-userns-restrict
+sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
+```
+
+This was required for the Codex sandbox probe to pass on GitHub's Ubuntu 24.04 ARM64 runner. It does not install an SDK or change the image. If the source profile is unavailable on your distribution, follow its AppArmor guidance rather than disabling the host restriction without reviewing the security impact.
 
 [Docker Compose can create a missing bind source directory](https://docs.docker.com/reference/compose-file/services/#short-syntax) as root. At startup, the image claims `./workspaces` when it is empty and root-owned, then checks that `dev` can write there. It does not change ownership of a nonempty mount or its project files. If an existing directory fails the check, fix its host ownership or ACLs, or set the UID/GID to its owner; the container log names the problem.
 
