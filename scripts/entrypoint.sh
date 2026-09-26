@@ -43,8 +43,12 @@ for sdk_dir in /opt/sdk/*; do
     chown -R dev:dev "$sdk_dir"
   fi
 done
-if [[ -d /home/dev/.cache && "$(stat -c %u:%g /home/dev/.cache)" != "$(id -u dev):$(id -g dev)" ]]; then
+if [[ -d /home/dev/.cache && ! -L /home/dev/.cache && ! -e /home/dev/.cache/.agent-devstation-ownership-v1 ]]; then
+  # Older images could leave root-owned files inside a dev-owned cache. Repair
+  # the persisted volume once, without walking a large cache on every restart.
   chown -R dev:dev /home/dev/.cache
+  touch /home/dev/.cache/.agent-devstation-ownership-v1
+  chown dev:dev /home/dev/.cache/.agent-devstation-ownership-v1
 fi
 
 if [[ $# -gt 0 ]]; then

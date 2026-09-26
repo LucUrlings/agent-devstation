@@ -153,6 +153,8 @@ Set `AGENT_DEVSTATION_TAG` to a version tag for a fixed release, to `nightly` fo
 
 If upgrading from a Compose file whose service was named `devstation`, run `docker compose down` with that old file before replacing it, then `docker compose up -d` with the new file. If already replaced, run `docker compose up -d --remove-orphans` to remove the old service container. The `devstation-home` volume name is retained to preserve agent logins. Do not use `down -v` during this migration.
 
+On the first start with this image, the entrypoint also repairs ownership of cache files left by older images in the persisted home volume. Later restarts skip that recursive cache pass.
+
 Rename old `.env` keys when upgrading: use `AGENT_DEVSTATION_SDK_*` for SDKs, `AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED` and `AGENT_DEVSTATION_VSCODE_PASSWORD` for the editor, `AGENT_DEVSTATION_UID`/`AGENT_DEVSTATION_GID` for ownership, and `AGENT_DEVSTATION_TAG=nightly` in place of `DEVSTATION_TAG=nightly-latest`. The new Compose file reads only the namespaced keys.
 
 If startup fails, inspect `docker compose logs agent-devstation`. Check version syntax, upstream availability, outbound HTTPS, and disk space. If an SDK change appears ignored, inspect `docker compose config` and run `up -d` rather than `restart`. On Linux, check `AGENT_DEVSTATION_UID`/`AGENT_DEVSTATION_GID` and host bind mount ownership if writes fail. If Codex device login fails, check its account setting. For Claude Remote Control, run `claude doctor` and check subscription login, organization policy, project trust, API endpoint, and conflicting API variables. For editor issues, test loopback access before checking DNS, TLS, and authentication.

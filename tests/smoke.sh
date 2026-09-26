@@ -3,7 +3,16 @@ set -euo pipefail
 
 image=${IMAGE:-agent-devstation:ci}
 name="devstation-smoke-$$"
-trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+cache_volume="devstation-cache-smoke-$$"
+trap 'docker rm -f "$name" >/dev/null 2>&1 || true; docker volume rm "$cache_volume" >/dev/null 2>&1 || true' EXIT
+
+# A home volume created by an older image can contain root-owned uv cache files
+# even when the cache directory itself belongs to dev.
+docker volume create "$cache_volume" >/dev/null
+docker run --rm -v "$cache_volume:/home/dev" --entrypoint bash "$image" -lc \
+  'mkdir -p /home/dev/.cache/uv; chown dev:dev /home/dev/.cache; touch /home/dev/.cache/uv/root-owned'
+docker run --rm -v "$cache_volume:/home/dev" "$image" bash -lc \
+  'test -w /home/dev/.cache/uv/root-owned && test -f /home/dev/.cache/.agent-devstation-ownership-v1'
 
 docker run -d --name "$name" -e AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=false "$image" >/dev/null
 sleep 3
