@@ -38,20 +38,33 @@ docker exec -u dev "$name" bash -lc 'for sdk in python python3 pip3 node npm npx
 docker exec -u dev "$name" bash -lc '! curl -s --max-time 1 -o /dev/null http://127.0.0.1:8080/'
 docker rm -f "$name" >/dev/null
 
-# The home volume retains Codex daemon state, but its package under /opt/codex
-# belongs to the disposable container layer. A recreated container must let the
-# CLI bootstrap that package again instead of trusting the stale state.
+# The home volume retains Codex daemon state and the user's start choice, but
+# its package under /opt/codex belongs to the disposable container layer. A
+# recreated container must bootstrap the package and resume Remote Control.
 docker volume create "$codex_volume" >/dev/null
 for generation in 1 2; do
   docker run -d --name "$codex_name" -v "$codex_volume:/home/dev" "$image" >/dev/null
-  docker exec -u dev "$codex_name" bash -lc '
+  if [[ "$generation" == 1 ]]; then
+    docker exec -u dev "$codex_name" bash -lc '
     set -euo pipefail
     status=0
     timeout 60s codex remote-control start >/tmp/codex-remote-start.log 2>&1 || status=$?
     [[ "$status" == 0 || "$status" == 1 ]] || { cat /tmp/codex-remote-start.log; exit 1; }
     test -x /home/dev/.codex/packages/app-server-daemon/current/bin/codex
     test -S /home/dev/.codex/app-server-control/app-server-control.sock
+    touch /home/dev/.codex/.agent-devstation-remote-control-enabled
   '
+  else
+    docker exec -u dev "$codex_name" bash -lc '
+      set -euo pipefail
+      for _ in $(seq 1 60); do
+        test -S /home/dev/.codex/app-server-control/app-server-control.sock && exit 0
+        sleep 1
+      done
+      exit 1
+    '
+    docker logs "$codex_name" 2>&1 | grep -q 'Resuming Codex Remote Control'
+  fi
   docker rm -f "$codex_name" >/dev/null
 done
 
