@@ -82,7 +82,7 @@ This enables the browser editor and Codex's Linux sandbox so you can use **eithe
    docker compose exec -u dev agent-devstation codex sandbox -c 'sandbox_mode="read-only"' /bin/sh -lc 'cd "$HOME" && pwd -P'
    ```
 
-   It should print `/home/dev`. If it fails with a user-namespace error, follow the [host setup steps](docs/guide.md#codex-sandboxed-setup) and [OpenAI's Linux prerequisites](https://learn.chatgpt.com/docs/sandboxing?surface=cli#prerequisites). Ubuntu 24.04 may need a one-time AppArmor profile on the Docker host. The image includes `bubblewrap`. The two `security_opt` settings relax Docker's seccomp and container AppArmor filters for this service.
+   It should print `/home/dev`. For `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`, follow the [Ubuntu 24.04 host fix](docs/guide.md#bwrap-loopback-error). The image includes `bubblewrap`; the two `security_opt` settings relax Docker's seccomp and container AppArmor filters for this service.
 
 5. Run the phone commands for whichever agent you use. Codex starts its background server and pairs while signed in to the same ChatGPT account. Claude Code shows a URL or QR code; keep its command running while using it.
 
