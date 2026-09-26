@@ -10,11 +10,16 @@ fetch() {
 }
 
 valid_version() {
-  [[ "$1" =~ ^[0-9]+(\.[0-9]+){0,2}(\.x)?$ ]]
+  local name=$1 version=$2
+  if [[ "$name" == java ]]; then
+    [[ "$version" =~ ^[0-9]+(\.[0-9]+){0,3}$ ]]
+  else
+    [[ "$version" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]
+  fi
 }
 
 requested_prefix() {
-  printf '%s' "${1%.x}"
+  printf '%s' "$1"
 }
 
 matches() {
@@ -27,12 +32,18 @@ installed_version() {
   local name=$1
   [[ -e "$sdk_root/$name/current" ]] || return 1
   case "$name" in
-    python) "$sdk_root/python/current/bin/python3" -c 'import platform; print(platform.python_version())' ;;
-    node) "$sdk_root/node/current/bin/node" --version | sed 's/^v//' ;;
-    dotnet) "$sdk_root/dotnet/current/dotnet" --version ;;
-    java) "$sdk_root/java/current/bin/java" -version 2>&1 | sed -nE '1s/.*version "([0-9.]+).*/\1/p' ;;
-    go) "$sdk_root/go/current/bin/go" version | sed -nE 's/.* go([0-9.]+) .*/\1/p' ;;
-    rust) "$sdk_root/rust/current/bin/rustc" --version | awk '{print $2}' ;;
+    python) [[ -x "$sdk_root/python/current/bin/python3" && -x "$sdk_root/python/current/bin/pip3" ]] || return 1
+      "$sdk_root/python/current/bin/python3" -c 'import platform; print(platform.python_version())' ;;
+    node) [[ -x "$sdk_root/node/current/bin/node" && -x "$sdk_root/node/current/bin/npm" && -x "$sdk_root/node/current/bin/npx" && -x "$sdk_root/node/current/bin/corepack" ]] || return 1
+      "$sdk_root/node/current/bin/node" --version | sed 's/^v//' ;;
+    dotnet) [[ -x "$sdk_root/dotnet/current/dotnet" ]] || return 1
+      "$sdk_root/dotnet/current/dotnet" --version ;;
+    java) [[ -x "$sdk_root/java/current/bin/java" && -x "$sdk_root/java/current/bin/javac" ]] || return 1
+      "$sdk_root/java/current/bin/java" -version 2>&1 | sed -nE '1s/.*version "([0-9.]+).*/\1/p' ;;
+    go) [[ -x "$sdk_root/go/current/bin/go" && -x "$sdk_root/go/current/bin/gofmt" ]] || return 1
+      "$sdk_root/go/current/bin/go" version | sed -nE 's/.* go([0-9.]+) .*/\1/p' ;;
+    rust) [[ -x "$sdk_root/rust/current/bin/rustc" && -x "$sdk_root/rust/current/bin/cargo" && -x "$sdk_root/rust/current/bin/rustup" ]] || return 1
+      "$sdk_root/rust/current/bin/rustc" --version | awk '{print $2}' ;;
   esac
 }
 
@@ -66,7 +77,7 @@ install_dotnet() {
   local version=$1
   fetch https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
   mkdir -p "$sdk_root/dotnet/current"
-  if [[ "$version" =~ ^[0-9]+(\.[0-9]+)?(\.x)?$ ]]; then
+  if [[ "$version" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
     local channel
     channel=$(requested_prefix "$version")
     [[ "$channel" == *.* ]] || channel="$channel.0"
@@ -78,13 +89,24 @@ install_dotnet() {
 }
 
 install_java() {
-  local major arch
+  local major arch link upper last
   major=${1%%.*}
   arch=$(dpkg --print-architecture)
   [[ "$arch" == amd64 ]] && arch=x64
   [[ "$arch" == arm64 ]] && arch=aarch64
   mkdir -p "$sdk_root/java/$1"
-  fetch "https://api.adoptium.net/v3/binary/latest/${major}/ga/linux/${arch}/jdk/hotspot/normal/eclipse" -o /tmp/devstation-java.tar.gz
+  if [[ "$1" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    fetch "https://api.adoptium.net/v3/binary/latest/${major}/ga/linux/${arch}/jdk/hotspot/normal/eclipse" -o /tmp/devstation-java.tar.gz
+  else
+    # The API's exact version endpoint requires a Maven-style range. Filter
+    # its results because the range can also contain a four-part update.
+    last=${1##*.}
+    upper="${1%.*}.$((10#$last + 1))"
+    link=$(fetch "https://api.adoptium.net/v3/assets/version/%5B${1}%2C${upper}%29?architecture=${arch}&image_type=jdk&os=linux&release_type=ga&vendor=eclipse&page_size=20" \
+      | jq -r --arg version "$1" '[.[] | select((.version_data.openjdk_version | split("+")[0] | split("-")[0]) == $version) | .binaries[] | .package.link][0] // empty')
+    [[ -n "$link" ]] || { echo "No Java release matches $1" >&2; return 1; }
+    fetch "$link" -o /tmp/devstation-java.tar.gz
+  fi
   tar -xzf /tmp/devstation-java.tar.gz --strip-components=1 -C "$sdk_root/java/$1"
   rm /tmp/devstation-java.tar.gz
   ln -s "$1" "$sdk_root/java/current"
@@ -103,43 +125,57 @@ install_go() {
 }
 
 install_rust() {
+  local toolchain=$1
+  # rustup has no major-only release channel. Its stable channel supplies the
+  # current major, and the post-install version check rejects a mismatch.
+  [[ "$toolchain" =~ ^[0-9]+$ ]] && toolchain=stable
   mkdir -p "$CARGO_HOME" "$RUSTUP_HOME"
   fetch https://sh.rustup.rs -o /tmp/rustup-init.sh
-  HOME=/root sh /tmp/rustup-init.sh -y --no-modify-path --profile default --default-toolchain "$(requested_prefix "$1")"
+  HOME=/root sh /tmp/rustup-init.sh -y --no-modify-path --profile default --default-toolchain "$toolchain"
   rm /tmp/rustup-init.sh
 }
 
 declare -A requests=(
-  [python]="${SDK_PYTHON:-}" [node]="${SDK_NODE:-}"
-  [dotnet]="${SDK_DOTNET:-}" [java]="${SDK_JAVA:-}"
-  [go]="${SDK_GO:-}" [rust]="${SDK_RUST:-}"
+  [python]="${AGENT_DEVSTATION_SDK_PYTHON-${SDK_PYTHON-}}"
+  [node]="${AGENT_DEVSTATION_SDK_NODE-${SDK_NODE-}}"
+  [dotnet]="${AGENT_DEVSTATION_SDK_DOTNET-${SDK_DOTNET-}}"
+  [java]="${AGENT_DEVSTATION_SDK_JAVA-${SDK_JAVA-}}"
+  [go]="${AGENT_DEVSTATION_SDK_GO-${SDK_GO-}}"
+  [rust]="${AGENT_DEVSTATION_SDK_RUST-${SDK_RUST-}}"
 )
 
 for name in python node dotnet java go rust; do
   version=${requests[$name]}
   [[ -z "$version" ]] && continue
-  valid_version "$version" || { echo "Invalid SDK_${name^^} version: $version" >&2; exit 2; }
-  if [[ "$name" == java && ! "$version" =~ ^[0-9]+$ ]]; then
-    echo 'SDK_JAVA accepts a major version such as 21' >&2
-    exit 2
-  fi
+  valid_version "$name" "$version" || { echo "Invalid AGENT_DEVSTATION_SDK_${name^^} version: $version" >&2; exit 2; }
 done
 
 for name in python node dotnet java go rust; do
   version=${requests[$name]}
   [[ -z "$version" ]] && continue
-  current=$(installed_version "$name" || true)
+  # A binary can report its version before the rest of an archive is extracted.
+  # Treat only a fully verified installation as reusable after a restart.
+  complete_marker="$sdk_root/$name/.agent-devstation-complete"
+  current=''
+  if [[ -f "$complete_marker" ]]; then
+    current=$(installed_version "$name" || true)
+  fi
   if [[ -n "$current" ]] && matches "$current" "$version"; then
     echo "$name $current already installed"
     continue
   fi
-  if [[ -e "$sdk_root/$name/current" ]]; then
+  if [[ -n "$current" ]]; then
     echo "Installed $name version $current does not match $version; recreate the container" >&2
     exit 2
+  fi
+  if [[ -e "$sdk_root/$name" || -L "$sdk_root/$name" ]]; then
+    echo "Removing incomplete $name installation"
+    rm -rf -- "$sdk_root/$name"
   fi
   echo "Installing $name $version"
   "install_$name" "$version"
   current=$(installed_version "$name")
   matches "$current" "$version" || { echo "$name installed $current, expected $version" >&2; exit 2; }
+  touch "$complete_marker"
   echo "$name $current ready"
 done

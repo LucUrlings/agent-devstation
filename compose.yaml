@@ -1,24 +1,24 @@
 services:
-  devstation:
-    image: ghcr.io/lucurlings/agent-devstation:${DEVSTATION_TAG:-latest}
+  agent-devstation:
+    image: ghcr.io/lucurlings/agent-devstation:${AGENT_DEVSTATION_TAG:-latest}
+    pull_policy: always
     init: true
-    stdin_open: true
-    tty: true
     environment:
-      SDK_PYTHON: ${SDK_PYTHON-}
-      SDK_NODE: ${SDK_NODE-}
-      SDK_DOTNET: ${SDK_DOTNET-}
-      SDK_JAVA: ${SDK_JAVA-}
-      SDK_GO: ${SDK_GO-}
-      SDK_RUST: ${SDK_RUST-}
-      VSCODE_EDITOR_ENABLED: ${VSCODE_EDITOR_ENABLED-false}
-      PASSWORD: ${EDITOR_PASSWORD-}
-      DEV_UID: ${DEV_UID-1000}
-      DEV_GID: ${DEV_GID-1000}
+      AGENT_DEVSTATION_SDK_PYTHON: ${AGENT_DEVSTATION_SDK_PYTHON-3.14}
+      AGENT_DEVSTATION_SDK_NODE: ${AGENT_DEVSTATION_SDK_NODE-24}
+      AGENT_DEVSTATION_SDK_DOTNET: ${AGENT_DEVSTATION_SDK_DOTNET-}
+      AGENT_DEVSTATION_SDK_JAVA: ${AGENT_DEVSTATION_SDK_JAVA-}
+      AGENT_DEVSTATION_SDK_GO: ${AGENT_DEVSTATION_SDK_GO-}
+      AGENT_DEVSTATION_SDK_RUST: ${AGENT_DEVSTATION_SDK_RUST-}
+      AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED: ${AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED-false}
+      AGENT_DEVSTATION_VSCODE_PASSWORD: ${AGENT_DEVSTATION_VSCODE_PASSWORD-}
+      AGENT_DEVSTATION_UID: ${AGENT_DEVSTATION_UID-1000}
+      AGENT_DEVSTATION_GID: ${AGENT_DEVSTATION_GID-1000}
     volumes:
       - ./workspaces:/workspaces
       - devstation-home:/home/dev
-    # Uncomment only when enabling the editor for local access.
+    # Port 8080 serves only the optional code-server browser editor.
+    # Uncomment for local editor access; agents expose no HTTP port.
     # ports:
     #   - "127.0.0.1:8080:8080"
     restart: unless-stopped

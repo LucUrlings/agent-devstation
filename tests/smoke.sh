@@ -3,24 +3,68 @@ set -euo pipefail
 
 image=${IMAGE:-agent-devstation:ci}
 name="devstation-smoke-$$"
-trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+java_name="devstation-java-smoke-$$"
+cache_volume="devstation-cache-smoke-$$"
+trap 'docker rm -f "$name" "$java_name" >/dev/null 2>&1 || true; docker volume rm "$cache_volume" >/dev/null 2>&1 || true' EXIT
 
-docker run -d --name "$name" -e VSCODE_EDITOR_ENABLED=false "$image" >/dev/null
+# A home volume created by an older image can contain root-owned uv cache files
+# even when the cache directory itself belongs to dev.
+docker volume create "$cache_volume" >/dev/null
+docker run --rm -v "$cache_volume:/home/dev" --entrypoint bash "$image" -lc \
+  'mkdir -p /home/dev/.cache/uv; chown dev:dev /home/dev/.cache; touch /home/dev/.cache/uv/root-owned'
+docker run --rm -v "$cache_volume:/home/dev" "$image" bash -lc \
+  'test -w /home/dev/.cache/uv/root-owned && test -f /home/dev/.cache/.agent-devstation-ownership-v1'
+docker run --rm -e AGENT_DEVSTATION_UID=1234 -e AGENT_DEVSTATION_GID=1234 "$image" bash -lc \
+  'test "$(id -u):$(id -g)" = 1234:1234 && test -w /home/dev/.codex && test -w /workspaces'
+docker run --rm -e AGENT_DEVSTATION_UID=33 -e AGENT_DEVSTATION_GID=20 "$image" bash -lc \
+  'test "$(id -u):$(id -g)" = 33:20 && test -w /home/dev/.codex && test -w /workspaces'
+
+docker run -d --name "$name" -e AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=false "$image" >/dev/null
 sleep 3
 docker exec -u dev "$name" bash -lc 'codex --version && claude --version && code-server --version'
-docker exec -u dev "$name" bash -lc 'for sdk in python python3 node dotnet java go rustc cargo; do if command -v "$sdk" >/dev/null; then echo "Unexpected SDK command: $sdk" >&2; exit 1; fi; done'
+docker exec -u dev "$name" bash -lc '
+  set -euo pipefail
+  codex login --help | grep -- "--device-auth" >/dev/null
+  codex login --help | grep -- "--with-api-key" >/dev/null
+  codex remote-control --help | grep "pair" >/dev/null
+  claude auth --help | grep "login" >/dev/null
+  claude --help | grep -- "--remote-control" >/dev/null
+'
+docker exec -u dev "$name" bash -lc 'for sdk in python python3 pip3 node npm npx corepack dotnet java javac go gofmt rustc cargo rustup; do if command -v "$sdk" >/dev/null; then echo "Unexpected SDK command: $sdk" >&2; exit 1; fi; done'
 docker exec -u dev "$name" bash -lc '! curl -s --max-time 1 -o /dev/null http://127.0.0.1:8080/'
 docker rm -f "$name" >/dev/null
 
+if docker run --rm -e AGENT_DEVSTATION_SDK_NODE=24.x "$image" true >/dev/null 2>&1; then
+  echo 'Version syntax accepted .x unexpectedly' >&2
+  exit 1
+fi
+if docker run --rm -e AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=true "$image" true >/dev/null 2>&1; then
+  echo 'Editor started without a password unexpectedly' >&2
+  exit 1
+fi
+
+# Temurin's range API can return 21.0.12.1 when asked for 21.0.12. Verify
+# that an exact selector picks the requested numeric release.
+docker run -d --name "$java_name" -e AGENT_DEVSTATION_SDK_JAVA=21.0.12 "$image" >/dev/null
+ready=false
+for _ in $(seq 1 120); do
+  if docker logs "$java_name" 2>&1 | grep '^java 21.0.12 ready$' >/dev/null; then ready=true; break; fi
+  if [[ $(docker inspect -f '{{.State.Running}}' "$java_name") != true ]]; then docker logs "$java_name"; exit 1; fi
+  sleep 2
+done
+[[ "$ready" == true ]] || { docker logs "$java_name"; exit 1; }
+docker exec -u dev "$java_name" bash -lc 'java -version 2>&1 | grep -q "^openjdk version \"21.0.12\""'
+docker rm -f "$java_name" >/dev/null
+
 docker run -d --name "$name" \
-  -e SDK_PYTHON=3.13 -e SDK_NODE=22.x -e SDK_DOTNET=10 \
-  -e SDK_JAVA=21 -e SDK_GO=1.24 -e SDK_RUST=1.85 \
-  -e VSCODE_EDITOR_ENABLED=true -e PASSWORD=smoke-only-password \
+  -e AGENT_DEVSTATION_SDK_PYTHON=3.14 -e AGENT_DEVSTATION_SDK_NODE=24 -e AGENT_DEVSTATION_SDK_DOTNET=10 \
+  -e AGENT_DEVSTATION_SDK_JAVA=21 -e AGENT_DEVSTATION_SDK_GO=1.24 -e AGENT_DEVSTATION_SDK_RUST=1.85 \
+  -e AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=true -e AGENT_DEVSTATION_VSCODE_PASSWORD=smoke-only-password \
   "$image" >/dev/null
 
 ready=false
 for _ in $(seq 1 180); do
-  if docker logs "$name" 2>&1 | grep -q 'rust .* ready'; then ready=true; break; fi
+  if docker logs "$name" 2>&1 | grep 'rust .* ready' >/dev/null; then ready=true; break; fi
   if [[ $(docker inspect -f '{{.State.Running}}' "$name") != true ]]; then docker logs "$name"; exit 1; fi
   sleep 10
 done
@@ -34,6 +78,7 @@ done
 [[ "$editor_ready" == true ]] || { docker logs "$name"; exit 1; }
 
 docker exec -u dev "$name" bash -lc 'python3 --version && node --version && dotnet --version && java -version && go version && rustc --version && cargo --version && test "$JAVA_HOME" = /opt/sdk/java/current && test "$DOTNET_ROOT" = /opt/sdk/dotnet/current'
+docker exec -i -u dev -e DOTNET_CLI_TELEMETRY_OPTOUT=1 "$name" bash -s < tests/sdk-functional.sh
 docker exec -u dev "$name" bash -lc 'curl -s -D - -o /dev/null http://127.0.0.1:8080/ | grep -qi "Location: ./login"'
 docker exec -u dev "$name" bash -lc 'curl -s -c /tmp/editor-cookie -o /dev/null -d password=smoke-only-password http://127.0.0.1:8080/login; curl -s -b /tmp/editor-cookie -D - -o /dev/null http://127.0.0.1:8080/ | grep -qi "Location: ./?folder=/workspaces"'
 
@@ -43,7 +88,49 @@ sleep 5
 after=$(docker logs "$name" 2>&1 | grep -c '^Installing ')
 [[ "$before" == "$after" ]] || { echo 'Restart downloaded an SDK again' >&2; exit 1; }
 
+# A failed download can leave the current path without a working command. The
+# next start must repair it instead of entering a permanent restart loop.
+docker exec -u root "$name" mv /opt/sdk/node/current/bin/npm /opt/sdk/node/current/bin/npm.incomplete
+docker restart "$name" >/dev/null
+recovered=false
+for _ in $(seq 1 60); do
+  if docker exec -u dev "$name" npm --version >/dev/null 2>&1; then recovered=true; break; fi
+  if [[ $(docker inspect -f '{{.State.Running}}' "$name") != true ]]; then docker logs "$name"; exit 1; fi
+  sleep 2
+done
+[[ "$recovered" == true ]] || { docker logs "$name"; exit 1; }
+docker logs "$name" 2>&1 | grep '^Removing incomplete node installation$' >/dev/null
+
+# An interrupted install can also leave a version directory before the
+# current link is created. Startup must clear that partial directory.
+docker exec -u root "$name" rm /opt/sdk/node/current
+docker restart "$name" >/dev/null
+recovered=false
+for _ in $(seq 1 60); do
+  if docker exec -u dev "$name" npm --version >/dev/null 2>&1; then recovered=true; break; fi
+  if [[ $(docker inspect -f '{{.State.Running}}' "$name") != true ]]; then docker logs "$name"; exit 1; fi
+  sleep 2
+done
+[[ "$recovered" == true ]] || { docker logs "$name"; exit 1; }
+repairs=$(docker logs "$name" 2>&1 | grep -c '^Removing incomplete node installation$')
+[[ "$repairs" -ge 2 ]] || { echo 'Missing-current recovery did not clear the partial SDK' >&2; exit 1; }
+docker exec -u dev "$name" bash -lc 'test -w /opt/sdk/node/current/bin && test -w /opt/sdk/node/current/lib/node_modules'
+
+# Go can still report its version when extraction stopped before its source
+# tree was complete. Without the completion marker, startup must reinstall it.
+docker exec -u root "$name" mv /opt/sdk/go/current/src /opt/sdk/go/current/src.incomplete
+docker exec -u root "$name" mv /opt/sdk/go/.agent-devstation-complete /opt/sdk/go/.agent-devstation-incomplete
+docker restart "$name" >/dev/null
+recovered=false
+for _ in $(seq 1 60); do
+  if docker exec -u dev "$name" bash -lc 'test -d /opt/sdk/go/current/src && test -f /opt/sdk/go/.agent-devstation-complete && go version' >/dev/null 2>&1; then recovered=true; break; fi
+  if [[ $(docker inspect -f '{{.State.Running}}' "$name") != true ]]; then docker logs "$name"; exit 1; fi
+  sleep 2
+done
+[[ "$recovered" == true ]] || { docker logs "$name"; exit 1; }
+docker logs "$name" 2>&1 | grep '^Removing incomplete go installation$' >/dev/null
+
 docker rm -f "$name" >/dev/null
 docker run -d --name "$name" "$image" >/dev/null
 sleep 3
-docker exec -u dev "$name" bash -lc 'for sdk in python python3 node dotnet java go rustc cargo; do ! command -v "$sdk" || exit 1; done'
+docker exec -u dev "$name" bash -lc 'for sdk in python python3 pip3 node npm npx corepack dotnet java javac go gofmt rustc cargo rustup; do ! command -v "$sdk" || exit 1; done'

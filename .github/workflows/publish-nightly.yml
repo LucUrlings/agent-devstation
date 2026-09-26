@@ -1,7 +1,9 @@
 name: Publish nightly image
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
 
 permissions:
@@ -15,9 +17,16 @@ concurrency:
 
 env:
   IMAGE: ghcr.io/lucurlings/agent-devstation
+  SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+  SOURCE_RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
 
 jobs:
   build:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == 'main'
     strategy:
       fail-fast: false
       matrix:
@@ -32,6 +41,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SOURCE_SHA }}
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
         with:
@@ -43,13 +54,17 @@ jobs:
           context: .
           platforms: ${{ matrix.platform }}
           push: true
-          tags: ${{ env.IMAGE }}:nightly-${{ github.sha }}-${{ matrix.arch }}
+          tags: ${{ env.IMAGE }}:nightly-${{ env.SOURCE_SHA }}-${{ matrix.arch }}
+      - name: Smoke-test the pushed architecture image
+        run: |
+          image="${IMAGE}:nightly-${SOURCE_SHA}-${{ matrix.arch }}"
+          docker pull "$image"
+          IMAGE="$image" bash tests/smoke.sh
 
   manifest:
     needs: build
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
         with:
@@ -59,14 +74,25 @@ jobs:
       - name: Publish and verify nightly multi-platform tags
         run: |
           docker buildx imagetools create \
-            --tag "${IMAGE}:nightly-${GITHUB_SHA}" \
-            "${IMAGE}:nightly-${GITHUB_SHA}-amd64" \
-            "${IMAGE}:nightly-${GITHUB_SHA}-arm64"
-          docker buildx imagetools inspect --raw "${IMAGE}:nightly-${GITHUB_SHA}" \
-            | jq -e '([.manifests[].platform | select(.os == "linux") | .architecture] | sort) == ["amd64", "arm64"]'
-          main_sha=$(git ls-remote origin refs/heads/main | awk '{print $1}')
-          if [[ "${main_sha}" == "${GITHUB_SHA}" ]]; then
+            --tag "${IMAGE}:nightly-${SOURCE_SHA}" \
+            --annotation "index:io.github.lucurlings.agent-devstation.ci-run-number=${SOURCE_RUN_NUMBER}" \
+            "${IMAGE}:nightly-${SOURCE_SHA}-amd64" \
+            "${IMAGE}:nightly-${SOURCE_SHA}-arm64"
+          docker buildx imagetools inspect --raw "${IMAGE}:nightly-${SOURCE_SHA}" \
+            | jq -e --arg run "$SOURCE_RUN_NUMBER" '([.manifests[].platform | select(.os == "linux") | .architecture] | sort) == ["amd64", "arm64"] and .annotations["io.github.lucurlings.agent-devstation.ci-run-number"] == $run'
+          nightly_run=0
+          if docker buildx imagetools inspect --raw "${IMAGE}:nightly" > /tmp/nightly-manifest.json 2> /tmp/nightly-inspect.err; then
+            nightly_run=$(jq -r '.annotations["io.github.lucurlings.agent-devstation.ci-run-number"] // "0"' /tmp/nightly-manifest.json)
+            [[ "$nightly_run" =~ ^[0-9]+$ ]] || { echo 'nightly has an invalid CI run number' >&2; exit 1; }
+          elif ! grep -qi 'not found' /tmp/nightly-inspect.err; then
+            cat /tmp/nightly-inspect.err >&2
+            exit 1
+          fi
+          if (( SOURCE_RUN_NUMBER >= nightly_run )); then
             docker buildx imagetools create \
-              --tag "${IMAGE}:nightly-latest" \
-              "${IMAGE}:nightly-${GITHUB_SHA}"
+              --tag "${IMAGE}:nightly" \
+              --annotation "index:io.github.lucurlings.agent-devstation.ci-run-number=${SOURCE_RUN_NUMBER}" \
+              "${IMAGE}:nightly-${SOURCE_SHA}"
+            docker buildx imagetools inspect --raw "${IMAGE}:nightly" \
+              | jq -e --arg run "$SOURCE_RUN_NUMBER" '.annotations["io.github.lucurlings.agent-devstation.ci-run-number"] == $run'
           fi
