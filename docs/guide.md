@@ -63,40 +63,23 @@ The default Compose file does not disable Docker's seccomp or container AppArmor
 
 ### Simple Codex CLI
 
-Run Codex without its background daemon or inner Linux sandbox:
+Run Codex without host namespace setup:
 
 ```sh
 docker compose exec -u dev -w /workspaces/project agent-devstation codex --no-daemon --sandbox danger-full-access
 ```
 
-Replace `project` with a directory under `/workspaces`. Codex can read and change anything accessible to the `dev` user inside the container, including mounted projects and saved login files. Docker still limits which host files are mounted. This path needs no host user-namespace setup, but `--no-daemon` does not provide Codex phone Remote Control. [OpenAI's permission modes](https://learn.chatgpt.com/docs/sandboxing?surface=cli#how-permissions-work) explain `danger-full-access`.
+Replace `project` with your project directory. `danger-full-access` lets Codex access all files available to `dev` inside the container, including saved logins. `--no-daemon` means no Codex phone Remote Control. [OpenAI explains the permission modes](https://learn.chatgpt.com/docs/sandboxing?surface=cli#how-permissions-work).
 
 ### Codex sandboxed setup
 
-To use Codex's normal file restrictions and its background server for phone Remote Control, uncomment `security_opt` in `compose.yaml` and run `docker compose up -d` to recreate the container. Codex's bubblewrap sandbox needs namespace and mount calls that [Docker's default seccomp policy blocks](https://docs.docker.com/engine/security/seccomp/). `seccomp=unconfined` disables Docker's seccomp filter for this container; `apparmor=unconfined` removes its container-level AppArmor policy. These settings **reduce container isolation**. Docker's default capability limits remain, and the service still does not use `privileged: true` or mount the Docker socket. Use trusted projects and users. A host-level user-namespace restriction may still need setup.
-
-The image installs Ubuntu's `bubblewrap` package at `/usr/bin/bwrap`, so there is no separate `bubblewrap` installation on the Docker host. Check the sandbox as `dev`:
+For Codex's normal sandbox and phone Remote Control, uncomment `security_opt` in `compose.yaml` and run `docker compose up -d`. These options disable Docker's seccomp and container AppArmor filters, reducing container isolation. The image already includes `bubblewrap`; check whether the host allows its sandbox:
 
 ```sh
 docker compose exec -u dev agent-devstation codex sandbox -c 'sandbox_mode="read-only"' /bin/sh -lc 'cd "$HOME" && pwd -P'
 ```
 
-If it prints `/home/dev`, no host setup is needed. If it reports a user namespace or AppArmor error, follow [OpenAI's Linux prerequisites](https://learn.chatgpt.com/docs/sandboxing?surface=cli#prerequisites) for your Docker **host**. On Ubuntu 24.04, install and load the additional profile on the host:
-
-```sh
-sudo apt update
-sudo apt install apparmor-profiles apparmor-utils
-sudo install -m 0644 /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/bwrap-userns-restrict
-sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
-```
-
-Ubuntu 26.04 supplies that profile in its `apparmor` package; load it on the host if necessary:
-
-```sh
-sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
-```
-
-[Ubuntu's package list](https://packages.ubuntu.com/resolute/all/apparmor/filelist) shows the 26.04 location. If the file or `apparmor_parser` command is missing on 26.04, run `sudo apt install apparmor apparmor-utils` on the host first. Debian and Fedora have their own namespace policies; use the sandbox probe above and follow their distribution's instructions if it fails. The image cannot change host kernel policy. Once the probe works, launch plain `codex` from a project. Codex Remote Control still requires ChatGPT login and an account-based phone pairing test.
+If it prints `/home/dev`, launch plain `codex` from a project. If it fails, follow [OpenAI's Linux sandbox prerequisites](https://learn.chatgpt.com/docs/sandboxing?surface=cli#prerequisites) on the Docker **host**. Ubuntu 24.04 may need its `bwrap` AppArmor profile; other hosts may have different namespace rules. Phone pairing still needs a ChatGPT login and an account-based test.
 
 [Docker Compose can create a missing bind source directory](https://docs.docker.com/reference/compose-file/services/#short-syntax) as root. At startup, the image claims `./workspaces` when it is empty and root-owned, then checks that `dev` can write there. It does not change ownership of a nonempty mount or its project files. If an existing directory fails the check, fix its host ownership or ACLs, or set the UID/GID to its owner; the container log names the problem.
 
