@@ -3,9 +3,10 @@ services:
     image: ghcr.io/lucurlings/agent-devstation:${AGENT_DEVSTATION_TAG:-latest}
     pull_policy: always
     init: true
-    # Codex's Linux sandbox needs user namespaces for the phone folder picker.
+    # Codex's Linux sandbox needs namespace and mount syscalls.
+    # This removes Docker's seccomp filter for this container.
     security_opt:
-      - seccomp=./seccomp-codex.json
+      - seccomp=unconfined
       - apparmor=unconfined
     environment:
       AGENT_DEVSTATION_SDK_PYTHON: ${AGENT_DEVSTATION_SDK_PYTHON-3.14}

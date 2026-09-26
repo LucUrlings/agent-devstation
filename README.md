@@ -6,13 +6,7 @@ A ready-to-run Docker workspace with **Codex**, **Claude Code**, and **GitHub CL
 
 ## Quick start
 
-1. Install Docker with Compose and Git. Clone this repository; it includes the Compose file and Codex sandbox policy:
-
-   ```sh
-   git clone https://github.com/LucUrlings/agent-devstation.git
-   cd agent-devstation
-   ```
-
+1. Install Docker with Compose. Copy [compose.yaml](compose.yaml) into a directory on your server; it is the only setup file.
 2. Start the prebuilt image; Compose pulls it automatically and does not build it:
 
    ```sh
@@ -53,7 +47,7 @@ An empty value disables an SDK, including either default. A partial version sele
 
 Set `AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=true` and `AGENT_DEVSTATION_VSCODE_PASSWORD` to enable code-server on **container port 8080**. Uncomment the loopback port mapping in Compose for local browser access. For remote access, use your own reverse proxy with TLS and authentication. The editor shares `/workspaces` and the SDKs; disabling it removes its installation. [Editor setup](docs/guide.md#browser-editor).
 
-On Linux, set `AGENT_DEVSTATION_UID` and `AGENT_DEVSTATION_GID` if your project files are owned by IDs other than `1000:1000`. The image includes `bubblewrap`; no host install is normally needed. If the Codex sandbox or phone folder picker reports a namespace error, follow the [host check](docs/guide.md#codex-linux-sandbox-host-check). Keep the Compose seccomp file beside Compose.
+On Linux, set `AGENT_DEVSTATION_UID` and `AGENT_DEVSTATION_GID` if your project files are owned by IDs other than `1000:1000`. The image includes `bubblewrap`; no host install is normally needed. If the Codex sandbox or phone folder picker reports a namespace error, follow the [host check](docs/guide.md#codex-linux-sandbox-host-check). The Compose file uses `seccomp=unconfined` so Codex's sandbox can run; this disables Docker's seccomp filter for the container. See the [security boundary](docs/guide.md#complete-compose-configuration).
 
 ## Phone Remote Control
 
@@ -61,7 +55,7 @@ Both agents use their **official outbound** Remote Control workflows; neither ne
 
 ## Updates and security
 
-`latest` follows full releases; `nightly` follows successful merges to `main`. Run `git pull` to update the checkout and `docker compose up -d` to update the image. If Compose from `main` is newer than the full release, set `AGENT_DEVSTATION_TAG=nightly` in `.env` after its image publishes. The home volume keeps logins across recreation; back it up with `workspaces/`. Avoid `docker compose down -v` unless you intend to delete that volume. Do not mount the Docker socket or expose the editor without authentication. [Updates and troubleshooting](docs/guide.md#updates-troubleshooting-and-security).
+`latest` follows full releases; `nightly` follows successful merges to `main`. Run `docker compose up -d` to update the image; replace your copied Compose file when its settings change. If Compose from `main` is newer than the full release, set `AGENT_DEVSTATION_TAG=nightly` in `.env` after its image publishes. The home volume keeps logins across recreation; back it up with `workspaces/`. Avoid `docker compose down -v` unless you intend to delete that volume. Do not mount the Docker socket or expose the editor without authentication. [Updates and troubleshooting](docs/guide.md#updates-troubleshooting-and-security).
 
 Original project code is [Apache 2.0 licensed](LICENSE). See [Contributing](CONTRIBUTING.md), [Security](SECURITY.md), the [Code of Conduct](CODE_OF_CONDUCT.md), and [repository settings](docs/repository-settings.md).
 
