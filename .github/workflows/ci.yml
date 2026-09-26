@@ -2,8 +2,6 @@ name: CI
 
 on:
   pull_request:
-  push:
-    branches: [main]
 
 permissions:
   contents: read
@@ -16,7 +14,14 @@ jobs:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
       - run: docker compose config -q
-      - run: docker buildx build --platform linux/amd64 --load -t agent-devstation:ci .
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: agent-devstation:ci
+          cache-from: type=gha,scope=agent-devstation-amd64
+          cache-to: type=gha,scope=agent-devstation-amd64,mode=min,ignore-error=true
       - run: IMAGE=agent-devstation:ci bash tests/smoke.sh
 
   arm64-build:
@@ -25,4 +30,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
-      - run: docker buildx build --platform linux/arm64 --output type=cacheonly .
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/arm64
+          load: true
+          tags: agent-devstation:ci
+          cache-from: type=gha,scope=agent-devstation-arm64
+          cache-to: type=gha,scope=agent-devstation-arm64,mode=min,ignore-error=true
+      - run: docker run --rm agent-devstation:ci bash -lc 'codex --version && claude --version && gh --version && code-server --version'
