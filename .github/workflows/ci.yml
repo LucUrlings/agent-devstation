@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   agent-versions:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       codex: ${{ steps.resolve.outputs.codex }}
       claude: ${{ steps.resolve.outputs.claude }}
@@ -19,17 +19,15 @@ jobs:
 
   image-and-sdk-smoke:
     needs: agent-versions
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
       - run: docker compose config -q
-      - name: Load Ubuntu bubblewrap AppArmor profile
+      - name: Load bubblewrap AppArmor profile
         run: |
-          sudo apt-get update
-          sudo apt-get install -y apparmor-profiles apparmor-utils
-          sudo install -m 0644 /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/bwrap-userns-restrict
+          test -f /etc/apparmor.d/bwrap-userns-restrict
           sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
       - uses: docker/build-push-action@v7
         with:
@@ -46,16 +44,14 @@ jobs:
 
   arm64-build:
     needs: agent-versions
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
-      - name: Load Ubuntu bubblewrap AppArmor profile
+      - name: Load bubblewrap AppArmor profile
         run: |
-          sudo apt-get update
-          sudo apt-get install -y apparmor-profiles apparmor-utils
-          sudo install -m 0644 /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/bwrap-userns-restrict
+          test -f /etc/apparmor.d/bwrap-userns-restrict
           sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
       - uses: docker/build-push-action@v7
         with:
