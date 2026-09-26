@@ -9,8 +9,8 @@ seccomp-codex.json is derived from moby/profiles/seccomp/default.json at
 commit 85e237f1fe229a0c61c9c7d8e743fa780d3b97ca:
 https://github.com/moby/profiles/blob/85e237f1fe229a0c61c9c7d8e743fa780d3b97ca/seccomp/default.json
 
-Copyright 2014-2026 Docker, Inc. and contributors. Licensed under Apache-2.0.
-See LICENSE for the full license text.
+The source profile is licensed under Apache-2.0. See LICENSE for the full
+license text.
 
 Agent Devstation adds rules for clone and unshare with CLONE_NEWUSER, and
 mount, pivot_root, and umount2, to support Codex's bubblewrap sandbox.

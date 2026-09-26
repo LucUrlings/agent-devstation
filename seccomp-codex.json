@@ -946,5 +946,6 @@
       ],
       "action": "SCMP_ACT_ALLOW"
     }
-  ]
+  ],
+  "comment": "Agent Devstation: derived from moby/profiles default seccomp profile; adds bubblewrap namespace and mount rules. See NOTICE."
 }
