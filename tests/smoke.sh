@@ -13,6 +13,8 @@ docker run --rm -v "$cache_volume:/home/dev" --entrypoint bash "$image" -lc \
   'mkdir -p /home/dev/.cache/uv; chown dev:dev /home/dev/.cache; touch /home/dev/.cache/uv/root-owned'
 docker run --rm -v "$cache_volume:/home/dev" "$image" bash -lc \
   'test -w /home/dev/.cache/uv/root-owned && test -f /home/dev/.cache/.agent-devstation-ownership-v1'
+docker run --rm -e AGENT_DEVSTATION_UID=1234 -e AGENT_DEVSTATION_GID=1234 "$image" bash -lc \
+  'test "$(id -u):$(id -g)" = 1234:1234 && test -w /home/dev/.codex && test -w /workspaces'
 
 docker run -d --name "$name" -e AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=false "$image" >/dev/null
 sleep 3

@@ -28,6 +28,9 @@ fi
 if [[ "$(stat -c %u:%g /opt/codex)" != "$(id -u dev):$(id -g dev)" ]]; then
   chown -R dev:dev /opt/codex
 fi
+if ! mountpoint -q /workspaces && [[ "$(stat -c %u:%g /workspaces)" != "$(id -u dev):$(id -g dev)" ]]; then
+  chown dev:dev /workspaces
+fi
 
 mkdir -p /home/dev/.codex /home/dev/.claude /home/dev/.local/share/code-server /workspaces
 chown dev:dev /home/dev /home/dev/.codex /home/dev/.claude /home/dev/.local /home/dev/.local/share
