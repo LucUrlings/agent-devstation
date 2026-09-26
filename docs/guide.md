@@ -19,8 +19,6 @@ The linked [compose.yaml](../compose.yaml) is the complete one-file example. It 
 
 `init: true` forwards stop signals and reaps child processes. `stdin_open` and `tty` are unnecessary because `docker compose exec` provides a terminal. On Linux, set `AGENT_DEVSTATION_UID` and `AGENT_DEVSTATION_GID` to the owner of your project files if they differ from `1000:1000`. The image repairs an empty root-owned `./workspaces` bind mount; it will not change a nonempty project's ownership. The container does not mount the Docker socket or use `privileged: true`.
 
-To upgrade an older Compose file, first select an image with this change: `nightly` after its merged build publishes, or the next full release. Change only the container side of your project mount from `/workspaces` to `/home/dev/workspaces` and run `docker compose up -d`. Keep the same host path and named home volume; the files do not move on the host. The new image aliases `/workspaces` to the new path for saved commands. Older Compose files that still mount `/workspaces` remain usable, but the phone starts in `/home/dev` and will not show those projects there by default.
-
 ### Simple Codex CLI
 
 Run Codex without host namespace setup:

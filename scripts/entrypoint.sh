@@ -27,12 +27,7 @@ if [[ "$dev_uid" != "$(id -u dev)" ]]; then
   usermod -o -d /.agent-devstation-uid-change -u "$dev_uid" dev
   usermod -d /home/dev dev
 fi
-# New Compose files mount projects inside the phone's home folder. Keep older
-# Compose files that still mount /workspaces usable with the same image.
 workspace_dir=/home/dev/workspaces
-if ! mountpoint -q "$workspace_dir" && mountpoint -q /workspaces; then
-  workspace_dir=/workspaces
-fi
 if [[ "$(stat -c %u:%g /home/dev)" != "$(id -u dev):$(id -g dev)" ]]; then
   # Never change ownership of project files through the nested bind mount.
   chown dev:dev /home/dev
@@ -67,12 +62,6 @@ if ! dev_can_create_workspace; then
   echo "$workspace_dir is not writable by dev (UID $(id -u dev), GID $(id -g dev); directory owner $(stat -c %u:%g "$workspace_dir")). Set AGENT_DEVSTATION_UID/GID to the host owner or fix ownership of the mounted workspaces directory." >&2
   exit 1
 fi
-if [[ "$workspace_dir" == /home/dev/workspaces && ! -L /workspaces ]] \
-  && ! mountpoint -q /workspaces && rmdir /workspaces 2>/dev/null; then
-  # Keep saved commands that use the old absolute path working.
-  ln -s "$workspace_dir" /workspaces
-fi
-
 mkdir -p /home/dev/.codex /home/dev/.claude /home/dev/.local/share/code-server
 chown dev:dev /home/dev /home/dev/.codex /home/dev/.claude /home/dev/.local /home/dev/.local/share
 chown -R dev:dev /home/dev/.local/share/code-server

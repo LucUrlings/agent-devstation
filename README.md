@@ -117,7 +117,7 @@ The linked Compose file leaves the editor off. To enable it there, set `AGENT_DE
 
 ## Updates and security
 
-`latest` follows full releases; `nightly` follows successful merges to `main`. Run `docker compose up -d` to pull updates. To move existing projects under the phone's home folder, use an image with this change (`nightly` after it publishes, or the next release). Change only the container side of your existing project mount from `/workspaces` to `/home/dev/workspaces`; keep its host path and the named home volume. Compose recreates the container without moving project files. The new image also keeps `/workspaces` as an alias for old commands. Back up both before upgrading; `docker compose down -v` deletes the home volume. Do not mount the Docker socket or expose the editor without authentication. [Troubleshooting](docs/guide.md#updates-troubleshooting-and-security).
+`latest` follows full releases; `nightly` follows successful merges to `main`. Run `docker compose up -d` to pull updates, and replace your copied Compose file when its settings change. Back up both `workspaces/` and the named home volume; `docker compose down -v` deletes the home volume. Do not mount the Docker socket or expose the editor without authentication. [Troubleshooting](docs/guide.md#updates-troubleshooting-and-security).
 
 Original project code is [Apache 2.0 licensed](LICENSE). See [Contributing](CONTRIBUTING.md), [Security](SECURITY.md), the [Code of Conduct](CODE_OF_CONDUCT.md), and [repository settings](docs/repository-settings.md).
 

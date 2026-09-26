@@ -8,9 +8,9 @@ cache_volume="devstation-cache-smoke-$$"
 codex_name="devstation-codex-smoke-$$"
 codex_volume="devstation-codex-home-smoke-$$"
 workspace_volume="devstation-workspace-smoke-$$"
-legacy_workspace_volume="devstation-legacy-workspace-smoke-$$"
+nested_workspace_volume="devstation-nested-workspace-smoke-$$"
 nested_home_volume="devstation-nested-home-smoke-$$"
-trap 'docker rm -f "$name" "$java_name" "$codex_name" >/dev/null 2>&1 || true; docker volume rm "$cache_volume" "$codex_volume" "$workspace_volume" "$legacy_workspace_volume" "$nested_home_volume" >/dev/null 2>&1 || true' EXIT
+trap 'docker rm -f "$name" "$java_name" "$codex_name" >/dev/null 2>&1 || true; docker volume rm "$cache_volume" "$codex_volume" "$workspace_volume" "$nested_workspace_volume" "$nested_home_volume" >/dev/null 2>&1 || true' EXIT
 trap 'echo "Smoke test failed at line $LINENO" >&2' ERR
 
 wait_for_editor() {
@@ -55,7 +55,6 @@ bash tests/codex-wrapper.sh
 test "$(docker compose config --format json | jq -r '.services["agent-devstation"].security_opt // [] | length')" = 0
 docker compose config --format json | jq -e '.services["agent-devstation"].volumes | any(.target == "/home/dev/workspaces")' >/dev/null
 docker run --rm "$image" bash -lc 'test -x /usr/bin/bwrap'
-docker run --rm "$image" bash -lc 'test -L /workspaces && test "$(readlink /workspaces)" = /home/dev/workspaces'
 test "$(docker run --rm --security-opt seccomp=unconfined --security-opt apparmor=unconfined "$image" \
   codex sandbox -c 'sandbox_mode="read-only"' /bin/sh -lc 'cd "$HOME" && pwd -P')" = /home/dev
 if docker run --rm --security-opt seccomp=unconfined --security-opt apparmor=unconfined "$image" \
@@ -82,15 +81,11 @@ fi
 docker run --rm --mount "type=volume,src=$workspace_volume,dst=/home/dev/workspaces,volume-nocopy" --entrypoint bash "$image" -lc \
   'test "$(stat -c %u /home/dev/workspaces)" = 0 && test "$(stat -c %u /home/dev/workspaces/Watchtower)" = 1000'
 
-# Existing Compose files with the old mount target still work.
-docker volume create "$legacy_workspace_volume" >/dev/null
-docker run --rm --mount "type=volume,src=$legacy_workspace_volume,dst=/workspaces,volume-nocopy" "$image" bash -lc \
-  'test -w /workspaces && test -d /workspaces && test ! -L /workspaces'
-
 # The Compose layout nests a project mount under the persisted home volume.
 docker volume create "$nested_home_volume" >/dev/null
+docker volume create "$nested_workspace_volume" >/dev/null
 docker run --rm --mount "type=volume,src=$nested_home_volume,dst=/home/dev" \
-  --mount "type=volume,src=$legacy_workspace_volume,dst=/home/dev/workspaces,volume-nocopy" "$image" bash -lc \
+  --mount "type=volume,src=$nested_workspace_volume,dst=/home/dev/workspaces,volume-nocopy" "$image" bash -lc \
   'test "$PWD" = /home/dev/workspaces && test -w "$HOME/workspaces" && test -w "$HOME/.codex"'
 
 # A home volume created by an older image can contain root-owned uv cache files

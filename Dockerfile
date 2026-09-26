@@ -19,8 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       sudo passwd tar unzip xz-utils zstd build-essential libicu78 libssl3t64 \
     && rm -rf /var/lib/apt/lists/* \
     && if id -u ubuntu >/dev/null 2>&1; then usermod -l dev -d /home/dev -m ubuntu && groupmod -n dev ubuntu; else useradd -m -u 1000 -s /bin/bash dev; fi \
-    && mkdir -p /workspaces /opt/sdk /home/dev/workspaces /home/dev/.codex /home/dev/.config /home/dev/.local \
-    && chown -R dev:dev /workspaces /home/dev
+    && mkdir -p /opt/sdk /home/dev/workspaces /home/dev/.codex /home/dev/.config /home/dev/.local \
+    && chown -R dev:dev /home/dev
 
 # GitHub's signed apt repository supplies the same gh command to all projects.
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
