@@ -6,8 +6,14 @@ A ready-to-run Docker workspace with **Codex**, **Claude Code**, and **GitHub CL
 
 ## Quick start
 
-1. Install Docker with Compose. Download [compose.yaml](compose.yaml) and [seccomp-codex.json](seccomp-codex.json) into the same directory.
-2. Start the container. Compose pulls the image automatically:
+1. Install Docker with Compose and Git. Clone this repository; it includes the Compose file and Codex sandbox policy:
+
+   ```sh
+   git clone https://github.com/LucUrlings/agent-devstation.git
+   cd agent-devstation
+   ```
+
+2. Start the prebuilt image; Compose pulls it automatically and does not build it:
 
    ```sh
    docker compose up -d
@@ -55,7 +61,7 @@ Both agents use their **official outbound** Remote Control workflows; neither ne
 
 ## Updates and security
 
-`latest` follows full releases; `nightly` follows successful merges to `main`. If the Compose file from `main` is newer than the full release, set `AGENT_DEVSTATION_TAG=nightly` in `.env` after its image publishes. Run `docker compose up -d` to update. The home volume keeps logins across recreation; back it up with `workspaces/`. Avoid `docker compose down -v` unless you intend to delete that volume. Do not mount the Docker socket or expose the editor without authentication. [Updates and troubleshooting](docs/guide.md#updates-troubleshooting-and-security).
+`latest` follows full releases; `nightly` follows successful merges to `main`. Run `git pull` to update the checkout and `docker compose up -d` to update the image. If Compose from `main` is newer than the full release, set `AGENT_DEVSTATION_TAG=nightly` in `.env` after its image publishes. The home volume keeps logins across recreation; back it up with `workspaces/`. Avoid `docker compose down -v` unless you intend to delete that volume. Do not mount the Docker socket or expose the editor without authentication. [Updates and troubleshooting](docs/guide.md#updates-troubleshooting-and-security).
 
 Original project code is [Apache 2.0 licensed](LICENSE). See [Contributing](CONTRIBUTING.md), [Security](SECURITY.md), the [Code of Conduct](CODE_OF_CONDUCT.md), and [repository settings](docs/repository-settings.md).
 
