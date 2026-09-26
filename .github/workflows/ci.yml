@@ -7,7 +7,18 @@ permissions:
   contents: read
 
 jobs:
+  agent-versions:
+    runs-on: ubuntu-24.04
+    outputs:
+      codex: ${{ steps.resolve.outputs.codex }}
+      claude: ${{ steps.resolve.outputs.claude }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: resolve
+        run: bash scripts/resolve-agent-versions.sh >> "$GITHUB_OUTPUT"
+
   image-and-sdk-smoke:
+    needs: agent-versions
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -20,11 +31,15 @@ jobs:
           platforms: linux/amd64
           load: true
           tags: agent-devstation:ci
+          build-args: |
+            CODEX_VERSION=${{ needs.agent-versions.outputs.codex }}
+            CLAUDE_VERSION=${{ needs.agent-versions.outputs.claude }}
           cache-from: type=gha,scope=agent-devstation-amd64
           cache-to: type=gha,scope=agent-devstation-amd64,mode=min,ignore-error=true
       - run: IMAGE=agent-devstation:ci bash tests/smoke.sh
 
   arm64-build:
+    needs: agent-versions
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 45
     steps:
@@ -36,6 +51,9 @@ jobs:
           platforms: linux/arm64
           load: true
           tags: agent-devstation:ci
+          build-args: |
+            CODEX_VERSION=${{ needs.agent-versions.outputs.codex }}
+            CLAUDE_VERSION=${{ needs.agent-versions.outputs.claude }}
           cache-from: type=gha,scope=agent-devstation-arm64
           cache-to: type=gha,scope=agent-devstation-arm64,mode=min,ignore-error=true
       - run: docker run --rm agent-devstation:ci bash -lc 'codex --version && claude --version && gh --version && code-server --version'

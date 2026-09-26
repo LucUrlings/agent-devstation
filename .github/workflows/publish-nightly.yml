@@ -19,8 +19,24 @@ env:
   SOURCE_RUN_NUMBER: ${{ github.run_number }}
 
 jobs:
+  agent-versions:
+    if: github.repository == 'LucUrlings/agent-devstation'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      codex: ${{ steps.resolve.outputs.codex }}
+      claude: ${{ steps.resolve.outputs.claude }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - id: resolve
+        run: bash scripts/resolve-agent-versions.sh >> "$GITHUB_OUTPUT"
+
   build:
     if: github.repository == 'LucUrlings/agent-devstation'
+    needs: agent-versions
     strategy:
       fail-fast: false
       matrix:
@@ -49,6 +65,9 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           tags: ${{ env.IMAGE }}:nightly-${{ env.SOURCE_SHA }}-${{ matrix.arch }}
+          build-args: |
+            CODEX_VERSION=${{ needs.agent-versions.outputs.codex }}
+            CLAUDE_VERSION=${{ needs.agent-versions.outputs.claude }}
           cache-from: type=gha,scope=agent-devstation-${{ matrix.arch }}
           cache-to: type=gha,scope=agent-devstation-${{ matrix.arch }},mode=min,ignore-error=true
       - name: Smoke-test the pushed architecture image

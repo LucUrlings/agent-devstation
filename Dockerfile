@@ -25,22 +25,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && mkdir -p /workspaces /opt/sdk /home/dev/.codex /home/dev/.config /home/dev/.local \
     && chown -R dev:dev /workspaces /home/dev
 
-# Official standalone Codex release. The installer is executed only at image build time.
-RUN curl -fsSL https://chatgpt.com/codex/install.sh -o /tmp/install-codex.sh \
-    && HOME=/root CODEX_HOME=/opt/codex sh /tmp/install-codex.sh \
-    && ln -s /opt/codex/packages /home/dev/.codex/packages \
-    && chown -R dev:dev /opt/codex /home/dev/.codex \
-    && rm /tmp/install-codex.sh \
-    && /opt/codex/packages/standalone/current/bin/codex --version
-
-# Anthropic's signed stable apt repository keeps the CLI outside user SDK paths.
-RUN install -d -m 0755 /etc/apt/keyrings \
-    && curl -fsSL https://downloads.claude.ai/keys/claude-code.asc -o /etc/apt/keyrings/claude-code.asc \
-    && echo 'deb [signed-by=/etc/apt/keyrings/claude-code.asc] https://downloads.claude.ai/claude-code/apt/stable stable main' > /etc/apt/sources.list.d/claude-code.list \
-    && apt-get update && apt-get install -y --no-install-recommends claude-code \
-    && rm -rf /var/lib/apt/lists/* \
-    && claude --version
-
 # GitHub's signed apt repository supplies the same gh command to all projects.
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
     && chmod 0644 /etc/apt/keyrings/githubcli-archive-keyring.gpg \
@@ -61,6 +45,28 @@ RUN curl -fsSL https://astral.sh/uv/install.sh -o /tmp/install-uv.sh \
     && UV_INSTALL_DIR=/usr/local/bin sh /tmp/install-uv.sh \
     && rm /tmp/install-uv.sh \
     && uv --version
+
+# Anthropic's signed stable apt repository keeps the CLI outside user SDK paths.
+ARG CLAUDE_VERSION
+RUN install -d -m 0755 /etc/apt/keyrings \
+    && curl -fsSL https://downloads.claude.ai/keys/claude-code.asc -o /etc/apt/keyrings/claude-code.asc \
+    && echo 'deb [signed-by=/etc/apt/keyrings/claude-code.asc] https://downloads.claude.ai/claude-code/apt/stable stable main' > /etc/apt/sources.list.d/claude-code.list \
+    && apt-get update \
+    && if [ -n "$CLAUDE_VERSION" ]; then apt-get install -y --no-install-recommends "claude-code=$CLAUDE_VERSION"; else apt-get install -y --no-install-recommends claude-code; fi \
+    && rm -rf /var/lib/apt/lists/* \
+    && { [ -z "$CLAUDE_VERSION" ] || [ "$(dpkg-query -W -f='${Version}' claude-code)" = "$CLAUDE_VERSION" ]; } \
+    && claude --version
+
+# Official standalone Codex release. The installer is executed only at image build time.
+ARG CODEX_VERSION=latest
+RUN curl -fsSL https://chatgpt.com/codex/install.sh -o /tmp/install-codex.sh \
+    && HOME=/root CODEX_HOME=/opt/codex sh /tmp/install-codex.sh --release "$CODEX_VERSION" \
+    && ln -s /opt/codex/packages /home/dev/.codex/packages \
+    && chown -R dev:dev /opt/codex /home/dev/.codex \
+    && rm /tmp/install-codex.sh \
+    && installed=$(/opt/codex/packages/standalone/current/bin/codex --version) \
+    && echo "$installed" \
+    && { [ "$CODEX_VERSION" = latest ] || [ "$installed" = "codex-cli $CODEX_VERSION" ]; }
 
 COPY scripts/entrypoint.sh scripts/install-sdks.sh /usr/local/lib/agent-devstation/
 COPY scripts/codex.sh /usr/local/bin/codex
