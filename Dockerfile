@@ -2,9 +2,6 @@ FROM ubuntu:26.04
 
 LABEL org.opencontainers.image.source="https://github.com/LucUrlings/agent-devstation"
 
-ARG TARGETARCH
-ARG CODE_SERVER_VERSION=4.138.0
-
 ENV DEBIAN_FRONTEND=noninteractive \
     HOME=/home/dev \
     CODEX_HOME=/home/dev/.codex \
@@ -33,14 +30,6 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o 
     && rm -rf /var/lib/apt/lists/* \
     && gh --version
 
-# The standalone editor bundles its private Node runtime. It never adds node to PATH.
-RUN curl -fsSL "https://github.com/coder/code-server/releases/download/v${CODE_SERVER_VERSION}/code-server-${CODE_SERVER_VERSION}-linux-${TARGETARCH}.tar.gz" -o /tmp/code-server.tar.gz \
-    && mkdir -p /opt/code-server \
-    && tar -xzf /tmp/code-server.tar.gz --strip-components=1 -C /opt/code-server \
-    && ln -s /opt/code-server/bin/code-server /usr/local/bin/code-server \
-    && rm /tmp/code-server.tar.gz \
-    && code-server --version
-
 RUN curl -fsSL https://astral.sh/uv/install.sh -o /tmp/install-uv.sh \
     && UV_INSTALL_DIR=/usr/local/bin sh /tmp/install-uv.sh \
     && rm /tmp/install-uv.sh \
@@ -68,7 +57,7 @@ RUN curl -fsSL https://chatgpt.com/codex/install.sh -o /tmp/install-codex.sh \
     && echo "$installed" \
     && { [ "$CODEX_VERSION" = latest ] || [ "$installed" = "codex-cli $CODEX_VERSION" ]; }
 
-COPY scripts/entrypoint.sh scripts/install-sdks.sh /usr/local/lib/agent-devstation/
+COPY scripts/entrypoint.sh scripts/install-sdks.sh scripts/install-editor.sh /usr/local/lib/agent-devstation/
 COPY scripts/codex.sh /usr/local/bin/codex
 RUN chmod 0755 /usr/local/lib/agent-devstation/*.sh /usr/local/bin/codex && chown -R dev:dev /home/dev
 

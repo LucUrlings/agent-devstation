@@ -52,7 +52,7 @@ docker run --rm -e AGENT_DEVSTATION_UID=33 -e AGENT_DEVSTATION_GID=20 "$image" b
 
 docker run -d --name "$name" -e AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=false "$image" >/dev/null
 sleep 3
-docker exec -u dev "$name" bash -lc 'codex --version && claude --version && gh --version && code-server --version'
+docker exec -u dev "$name" bash -lc 'codex --version && claude --version && gh --version && ! command -v code-server'
 docker exec -u dev "$name" bash -lc '
   set -euo pipefail
   codex login --help | grep -- "--device-auth" >/dev/null
@@ -141,6 +141,7 @@ done
 [[ "$editor_ready" == true ]] || { docker logs "$name"; exit 1; }
 
 docker exec -u dev "$name" bash -lc 'python3 --version && node --version && dotnet --version && java -version && go version && rustc --version && cargo --version && test "$JAVA_HOME" = /opt/sdk/java/current && test "$DOTNET_ROOT" = /opt/sdk/dotnet/current'
+docker exec -u dev "$name" code-server --version
 docker exec -i -u dev -e DOTNET_CLI_TELEMETRY_OPTOUT=1 "$name" bash -s < tests/sdk-functional.sh
 docker exec -u dev "$name" bash -lc 'curl -s -D - -o /dev/null http://127.0.0.1:8080/ | grep -qi "Location: ./login"'
 docker exec -u dev "$name" bash -lc 'curl -s -c /tmp/editor-cookie -o /dev/null -d password=smoke-only-password http://127.0.0.1:8080/login; curl -s -b /tmp/editor-cookie -D - -o /dev/null http://127.0.0.1:8080/ | grep -qi "Location: ./?folder=/workspaces"'
@@ -150,6 +151,7 @@ docker restart "$name" >/dev/null
 sleep 5
 after=$(docker logs "$name" 2>&1 | grep -c '^Installing ')
 [[ "$before" == "$after" ]] || { echo 'Restart downloaded an SDK again' >&2; exit 1; }
+docker logs "$name" 2>&1 | grep '^Found code-server .*; already installed$' >/dev/null
 
 # A failed download can leave the current path without a working command. The
 # next start must repair it instead of entering a permanent restart loop.
@@ -193,7 +195,16 @@ done
 [[ "$recovered" == true ]] || { docker logs "$name"; exit 1; }
 docker logs "$name" 2>&1 | grep '^Removing incomplete go installation$' >/dev/null
 
+# A changed selector replaces the installed version, and an empty selector
+# removes it, even before a Compose recreation discards the container layer.
+replacement=$(docker exec -u root -e HOME=/root -e AGENT_DEVSTATION_SDK_NODE=22 "$name" /usr/local/lib/agent-devstation/install-sdks.sh)
+[[ "$replacement" == *'Uninstalling node '* && "$replacement" == *'Installing node 22'* ]] || { echo "$replacement" >&2; exit 1; }
+docker exec -u dev "$name" bash -lc 'node --version | grep -q "^v22\."'
+removal=$(docker exec -u root -e HOME=/root -e AGENT_DEVSTATION_SDK_NODE= "$name" /usr/local/lib/agent-devstation/install-sdks.sh)
+[[ "$removal" == *'Uninstalling node (not selected)'* ]] || { echo "$removal" >&2; exit 1; }
+docker exec -u dev "$name" bash -lc '! command -v node && test ! -e /opt/sdk/node'
+
 docker rm -f "$name" >/dev/null
 docker run -d --name "$name" "$image" >/dev/null
 sleep 3
-docker exec -u dev "$name" bash -lc 'for sdk in python python3 pip3 node npm npx corepack dotnet java javac go gofmt rustc cargo rustup; do ! command -v "$sdk" || exit 1; done'
+docker exec -u dev "$name" bash -lc 'for sdk in python python3 pip3 node npm npx corepack dotnet java javac go gofmt rustc cargo rustup code-server; do ! command -v "$sdk" || exit 1; done; test ! -e /opt/code-server'

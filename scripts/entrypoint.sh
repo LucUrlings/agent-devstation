@@ -92,6 +92,18 @@ if [[ -d /home/dev/.cache && ! -L /home/dev/.cache && ! -e /home/dev/.cache/.age
   chown dev:dev /home/dev/.cache/.agent-devstation-ownership-v1
 fi
 
+if [[ "$editor_enabled" == true ]]; then
+  /usr/local/lib/agent-devstation/install-editor.sh
+else
+  if [[ -e /opt/code-server || -L /opt/code-server || -e /usr/local/bin/code-server || -L /usr/local/bin/code-server ]]; then
+    echo 'Uninstalling code-server (editor disabled)'
+  else
+    echo 'code-server disabled; not installed'
+  fi
+  rm -f -- /usr/local/bin/code-server
+  rm -rf -- /opt/code-server
+fi
+
 if [[ $# -gt 0 ]]; then
   exec gosu dev "$@"
 fi
