@@ -2,6 +2,14 @@
 set -euo pipefail
 
 codex_bin=/opt/codex/packages/standalone/current/bin/codex
+remote_state_file=${CODEX_HOME:-$HOME/.codex}/.agent-devstation-remote-control-enabled
+
+# A successful explicit start opts in to resuming Remote Control after a
+# container restart. Stop (or logout) clears that intent immediately.
+if [[ "${1-}" == remote-control && "${2-}" == stop || "${1-}" == logout ]]; then
+  rm -f -- "$remote_state_file"
+  exec "$codex_bin" "$@"
+fi
 
 # Codex can launch its on-demand daemon but exhaust its socket-readiness wait
 # on a slow first start. Retry only that command and only for that error.
@@ -15,6 +23,7 @@ trap 'rm -f -- "$stdout_file" "$stderr_file"' EXIT
 
 for attempt in 1 2 3; do
   if "$codex_bin" "$@" >"$stdout_file" 2>"$stderr_file"; then
+    touch "$remote_state_file"
     cat "$stdout_file"
     cat "$stderr_file" >&2
     exit 0

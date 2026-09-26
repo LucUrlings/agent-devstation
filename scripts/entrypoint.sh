@@ -74,6 +74,13 @@ if [[ $# -gt 0 ]]; then
   exec gosu dev "$@"
 fi
 
+if [[ -f /home/dev/.codex/.agent-devstation-remote-control-enabled ]]; then
+  echo 'Resuming Codex Remote Control'
+  if ! gosu dev codex remote-control start; then
+    echo 'Codex Remote Control did not start; check the logs and run codex remote-control start after resolving the error' >&2
+  fi
+fi
+
 if [[ "$editor_enabled" == true ]]; then
   # code-server uses PASSWORD internally; users configure the namespaced setting.
   exec gosu dev env PASSWORD="$editor_password" code-server --bind-addr 0.0.0.0:8080 --auth password /workspaces
