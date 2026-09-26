@@ -36,9 +36,13 @@ chown -R dev:dev /home/dev/.local/share/code-server
 # Installers run as root, but HOME belongs to dev in normal sessions. Keep
 # installer caches out of the persisted dev home.
 HOME=/root /usr/local/lib/agent-devstation/install-sdks.sh
-if [[ "$(stat -c %u:%g /opt/sdk)" != "$(id -u dev):$(id -g dev)" ]]; then
-  chown -R dev:dev /opt/sdk
-fi
+chown dev:dev /opt/sdk
+for sdk_dir in /opt/sdk/*; do
+  [[ -e "$sdk_dir" ]] || continue
+  if [[ "$(stat -c %u:%g "$sdk_dir")" != "$(id -u dev):$(id -g dev)" ]]; then
+    chown -R dev:dev "$sdk_dir"
+  fi
+done
 if [[ -d /home/dev/.cache && "$(stat -c %u:%g /home/dev/.cache)" != "$(id -u dev):$(id -g dev)" ]]; then
   chown -R dev:dev /home/dev/.cache
 fi

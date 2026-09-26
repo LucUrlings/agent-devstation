@@ -79,6 +79,7 @@ done
 [[ "$recovered" == true ]] || { docker logs "$name"; exit 1; }
 repairs=$(docker logs "$name" 2>&1 | grep -c '^Removing incomplete node installation$')
 [[ "$repairs" -ge 2 ]] || { echo 'Missing-current recovery did not clear the partial SDK' >&2; exit 1; }
+docker exec -u dev "$name" bash -lc 'test -w /opt/sdk/node/current/bin && test -w /opt/sdk/node/current/lib/node_modules'
 
 docker rm -f "$name" >/dev/null
 docker run -d --name "$name" "$image" >/dev/null
