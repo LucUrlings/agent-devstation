@@ -1,3 +1,6 @@
+# Multi-platform index: BuildKit selects the client binaries for the target arch.
+FROM docker:29.8.1-cli@sha256:018edbc908e08fcc9dbf029c812c34251e9b4719e6f71ca0e5eae2a987d014ca AS docker-tools
+
 FROM ubuntu:26.04
 
 LABEL org.opencontainers.image.source="https://github.com/LucUrlings/agent-devstation"
@@ -21,6 +24,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && if id -u ubuntu >/dev/null 2>&1; then usermod -l dev -d /home/dev -m ubuntu && groupmod -n dev ubuntu; else useradd -m -u 1000 -s /bin/bash dev; fi \
     && mkdir -p /opt/sdk /home/dev/workspaces /home/dev/.codex /home/dev/.config /home/dev/.local \
     && chown -R dev:dev /home/dev
+
+# Client tools only; projects connect to a separately configured Docker daemon.
+# Keep plugins outside the persisted home volume so image updates replace them.
+COPY --from=docker-tools /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=docker-tools /usr/local/libexec/docker/cli-plugins/ /usr/local/libexec/docker/cli-plugins/
+RUN docker --version && docker compose version && docker buildx version
 
 # GitHub's signed apt repository supplies the same gh command to all projects.
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \

@@ -112,6 +112,8 @@ docker run --rm -e AGENT_DEVSTATION_UID=33 -e AGENT_DEVSTATION_GID=20 "$image" b
 docker run -d --name "$name" -e AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=false "$image" >/dev/null
 sleep 3
 docker exec -u dev "$name" bash -lc 'codex --version && claude --version && gh --version && ! command -v code-server'
+# Client tools must work as dev without a daemon or per-user plugin install.
+docker exec -u dev "$name" bash -lc 'docker --version && docker compose version && docker buildx version && ! command -v dockerd'
 docker exec -u dev "$name" bash -lc '
   set -euo pipefail
   codex login --help | grep -- "--device-auth" >/dev/null

@@ -2,7 +2,9 @@
 
 # Agent Devstation
 
-A prebuilt Docker workspace for **Codex**, **Claude Code**, GitHub CLI, and optional SDKs and browser editing. Projects live under `/home/dev/workspaces`; the agents and editor share the same files and SDKs. Images support Linux AMD64 and ARM64. Neither setup needs a repository clone or image build.
+A prebuilt Docker workspace for **Codex**, **Claude Code**, GitHub CLI, Docker CLI with Compose and Buildx, and optional SDKs and browser editing. Projects live under `/home/dev/workspaces`; the agents and editor share the same files and SDKs. Images support Linux AMD64 and ARM64. Neither setup needs a repository clone or image build.
+
+Docker commands require a separately configured daemon; the image includes client tools only. See [connecting to a development Docker daemon](docs/guide.md#docker-client-tools).
 
 ## Simple setup: terminal agents
 

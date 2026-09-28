@@ -2,5 +2,5 @@ Agent Devstation
 Copyright 2026 Agent Devstation contributors
 
 Original project code is licensed under the Apache License, Version 2.0.
-Codex, Claude Code, code-server, and optional SDKs are separate upstream software
-with their own licenses and terms.
+Codex, Claude Code, code-server, Docker CLI, Docker Compose, Docker Buildx, and
+optional SDKs are separate upstream software with their own licenses and terms.
