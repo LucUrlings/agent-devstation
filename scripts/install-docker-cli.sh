@@ -39,7 +39,7 @@ else
       docker_sha=667395fbffab52901b80181dfbb39ea76da2fbd7642c4fbddd24e42146b07b48
       compose_arch=aarch64
       compose_sha=732e3a84c1a0f67256ce80bc2598a24546b10ca05f9faa97efceb1171ece2ef7
-      buildx_sha=bdf356a3fe05d8cc6c302b75346d465eaf5ae2a2ceeca9a7105ca4e5dd5b5697ee4
+      buildx_sha=e5cc9fe3bbff5cbc91230981f7860e06076110730a2db997082652199042a1f2
       ;;
     *) echo "Unsupported Docker CLI architecture: $arch" >&2; exit 1 ;;
   esac
