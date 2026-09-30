@@ -19,6 +19,36 @@ The linked [compose.yaml](../compose.yaml) is the complete one-file example. It 
 
 `init: true` forwards stop signals and reaps child processes. `stdin_open` and `tty` are unnecessary because `docker compose exec` provides a terminal. On Linux, set `AGENT_DEVSTATION_UID` and `AGENT_DEVSTATION_GID` to the owner of your project files if they differ from `1000:1000`. The image repairs an empty root-owned `./workspaces` bind mount; it will not change a nonempty project's ownership. The container does not mount the Docker socket or use `privileged: true`.
 
+### Docker client tools
+
+The prebuilt AMD64 and ARM64 images include `docker`, `docker compose`, and `docker buildx`. They are installed at image build time, outside the persisted home volume. No Docker daemon runs inside Agent Devstation, and the default Compose file does not configure one.
+
+To use a separately managed DinD sidecar with TLS, add these settings to Agent Devstation's existing service configuration, replacing the service and volume names to match your deployment:
+
+```yaml
+environment:
+  DOCKER_HOST: tcp://agent-devstation-docker:2376
+  DOCKER_TLS_VERIFY: "1"
+  DOCKER_CERT_PATH: /certs/client
+volumes:
+  - agent-devstation-docker-client:/certs/client:ro
+```
+
+Merge these entries with the existing environment and mounts. Both services must share a Docker network. The sidecar must generate certificates with `DOCKER_TLS_CERTDIR=/certs`, have a hostname matching the name in `DOCKER_HOST`, and share its `/certs/client` volume with Agent Devstation. Keep the CA private key on the sidecar and do not publish the Docker API port. Wait for the daemon's health check before starting Agent Devstation.
+
+Bind mounts resolve on the daemon: mount the same workspace source at `/home/dev/workspaces` in both containers. Persist the sidecar's `/var/lib/docker` in its own named volume. Project ports published by nested Compose services are reachable from Agent Devstation at the sidecar's hostname; they must bind to the sidecar's network interface, not only its loopback. Publishing those ports again on the outer sidecar is needed only for access through the host.
+
+DinD requires a privileged sidecar, including the official rootless variant. It separates development Docker resources from the main daemon but is not a strong host-security boundary. Do not mount the main host's Docker socket. A dedicated development VM provides stronger isolation. See the [official Docker image documentation](https://hub.docker.com/_/docker).
+
+After configuring the connection, run these commands as `dev`:
+
+```sh
+docker version
+docker compose version
+docker buildx version
+docker info
+```
+
 ### Simple Codex CLI
 
 Run Codex without host namespace setup:
@@ -41,13 +71,24 @@ If it prints `/home/dev`, the sandbox prerequisite is ready. Run plain `codex` f
 
 ### bwrap loopback error
 
-If the sandbox check prints this error on an **Ubuntu 24.04 Docker host**:
+If the sandbox check prints this error on an **Ubuntu 24.04 or 26.04 Docker host**:
 
 ```text
 bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted
 ```
 
-First confirm that the full Compose example's `security_opt` lines are enabled and run `docker compose up -d` to recreate the container. Then copy and load Ubuntu's `bwrap` AppArmor profile **on the Docker host**:
+First confirm that the full Compose example's `security_opt` lines are enabled and run `docker compose up -d` to recreate the container. Check the sandbox again before changing the host.
+
+On **Ubuntu 26.04**, the `apparmor` package already provides `/etc/apparmor.d/bwrap-userns-restrict`. If the sandbox still fails, check and reload that profile **on the Docker host**:
+
+```sh
+ls -l /etc/apparmor.d/bwrap-userns-restrict
+sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
+```
+
+Do not copy the profile from `/usr/share/apparmor/extra-profiles/` on 26.04; it is not there. [Ubuntu's `apparmor` package file list](https://packages.ubuntu.com/resolute/amd64/apparmor/filelist) shows the installed path.
+
+On **Ubuntu 24.04**, if the profile does not already exist at `/etc/apparmor.d/bwrap-userns-restrict`, install, copy, and load it **on the Docker host**:
 
 ```sh
 sudo apt update
@@ -56,7 +97,7 @@ sudo install -m 0644 /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /e
 sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
 ```
 
-Run the sandbox check again; it should print `/home/dev`. The package step may report both packages already installed—still run the copy and parser commands. On Ubuntu 26.04, the profile ships with `apparmor` at `/etc/apparmor.d/bwrap-userns-restrict`; load it there if needed. Debian and Fedora may use different host rules. [OpenAI's Linux prerequisites](https://learn.chatgpt.com/docs/sandboxing?surface=cli#prerequisites) explain the host requirements. The image cannot override a host namespace restriction.
+If the profile already exists on 24.04, skip the copy and run only `sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict`. Run the sandbox check again; it should print `/home/dev`. Debian and Fedora may use different host rules. [OpenAI's Linux prerequisites](https://learn.chatgpt.com/docs/sandboxing?surface=cli#prerequisites) explain the host requirements. The image cannot override a host namespace restriction.
 
 To undo these Ubuntu 24.04 profile steps **if that profile file did not exist before you copied it**, remove the loaded profile first, then the file:
 

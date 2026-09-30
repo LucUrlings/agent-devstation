@@ -2,7 +2,9 @@
 
 # Agent Devstation
 
-A prebuilt Docker workspace for **Codex**, **Claude Code**, GitHub CLI, and optional SDKs and browser editing. Projects live under `/home/dev/workspaces`; the agents and editor share the same files and SDKs. Images support Linux AMD64 and ARM64. Neither setup needs a repository clone or image build.
+A prebuilt Docker workspace for **Codex**, **Claude Code**, GitHub CLI, Docker CLI with Compose and Buildx, and optional SDKs and browser editing. Projects live under `/home/dev/workspaces`; the agents and editor share the same files and SDKs. Images support Linux AMD64 and ARM64. Neither setup needs a repository clone or image build.
+
+Docker commands require a separately configured daemon; the image includes client tools only. See [connecting to a development Docker daemon](docs/guide.md#docker-client-tools).
 
 ## Simple setup: terminal agents
 
@@ -82,7 +84,7 @@ This enables the browser editor and Codex's Linux sandbox so you can use **eithe
    docker compose exec -u dev agent-devstation codex sandbox -c 'sandbox_mode="read-only"' /bin/sh -lc 'cd "$HOME" && pwd -P'
    ```
 
-   It should print `/home/dev`. For `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`, follow the [Ubuntu 24.04 host fix](docs/guide.md#bwrap-loopback-error). The image includes `bubblewrap`; the two `security_opt` settings relax Docker's seccomp and container AppArmor filters for this service.
+   It should print `/home/dev`. For `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`, follow the [Ubuntu 24.04 or 26.04 host instructions](docs/guide.md#bwrap-loopback-error). The image includes `bubblewrap`; the two `security_opt` settings relax Docker's seccomp and container AppArmor filters for this service.
 
 5. Run the phone commands for whichever agent you use. Codex starts its background server and pairs while signed in to the same ChatGPT account. Claude Code shows a URL or QR code; keep its command running while using it.
 
