@@ -3,6 +3,8 @@ set -euo pipefail
 
 editor_enabled=${AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED-${VSCODE_EDITOR_ENABLED-false}}
 editor_password=${AGENT_DEVSTATION_VSCODE_PASSWORD-${VSCODE_PASSWORD-${PASSWORD-}}}
+docker_cli_enabled=${AGENT_DEVSTATION_DOCKER_CLI_ENABLED-false}
+playwright_chromium_enabled=${AGENT_DEVSTATION_PLAYWRIGHT_CHROMIUM_ENABLED-false}
 dev_uid=${AGENT_DEVSTATION_UID-${DEV_UID-1000}}
 dev_gid=${AGENT_DEVSTATION_GID-${DEV_GID-1000}}
 
@@ -10,6 +12,12 @@ case "$editor_enabled" in
   true|false) ;;
   *) echo 'AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED must be true or false' >&2; exit 2 ;;
 esac
+for setting in "$docker_cli_enabled" "$playwright_chromium_enabled"; do
+  case "$setting" in
+    true|false) ;;
+    *) echo 'AGENT_DEVSTATION_DOCKER_CLI_ENABLED and AGENT_DEVSTATION_PLAYWRIGHT_CHROMIUM_ENABLED must be true or false' >&2; exit 2 ;;
+  esac
+done
 
 if [[ "$editor_enabled" == true && -z "$editor_password" ]]; then
   echo 'AGENT_DEVSTATION_VSCODE_PASSWORD is required when the editor is enabled' >&2
@@ -98,6 +106,8 @@ fi
 # Installers run as root, but HOME belongs to dev in normal sessions. Keep
 # installer caches out of the persisted dev home.
 HOME=/root /usr/local/lib/agent-devstation/install-sdks.sh >&2
+HOME=/root /usr/local/lib/agent-devstation/install-docker-cli.sh >&2
+HOME=/root /usr/local/lib/agent-devstation/install-playwright-browser.sh >&2
 chown dev:dev /opt/sdk
 for sdk_dir in /opt/sdk/*; do
   [[ -e "$sdk_dir" ]] || continue

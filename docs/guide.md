@@ -21,7 +21,7 @@ The linked [compose.yaml](../compose.yaml) is the complete one-file example. It 
 
 ### Docker client tools
 
-The prebuilt AMD64 and ARM64 images include `docker`, `docker compose`, and `docker buildx`. They are installed at image build time, outside the persisted home volume. No Docker daemon runs inside Agent Devstation, and the default Compose file does not configure one.
+Set `AGENT_DEVSTATION_DOCKER_CLI_ENABLED=true` in Compose to install `docker`, `docker compose`, and `docker buildx` at startup. This option defaults to false; add it to existing deployments that previously used the bundled client. The pinned AMD64 or ARM64 downloads are checked against SHA-256 hashes and installed outside the persisted home volume. A normal restart reuses them; a container recreation downloads them again. No Docker daemon runs inside Agent Devstation, and the default Compose file does not configure one.
 
 To use a separately managed DinD sidecar with TLS, add these settings to Agent Devstation's existing service configuration, replacing the service and volume names to match your deployment:
 
@@ -48,6 +48,21 @@ docker compose version
 docker buildx version
 docker info
 ```
+
+### Playwright Chromium
+
+Set `AGENT_DEVSTATION_PLAYWRIGHT_CHROMIUM_ENABLED=true` and select `AGENT_DEVSTATION_SDK_NODE=24` (or another supported Node release) in Compose. Startup downloads Chromium and its Ubuntu browser dependencies into the disposable container layer. A normal restart reuses the browser; a container recreation downloads it again. Disabling the option removes the browser, while any system dependencies already installed remain until the container is recreated.
+
+The image does not install a global Playwright package or CLI. Each project installs its own Playwright package, and it uses the shared browser through `PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers`. The default browser is for Playwright `1.63.0`; set `AGENT_DEVSTATION_PLAYWRIGHT_VERSION` to the exact version used by the project, then recreate Agent Devstation. Playwright requires a matching browser revision for each package version. [Playwright browser documentation](https://playwright.dev/docs/browsers).
+
+For example, in a project under `/home/dev/workspaces`:
+
+```sh
+npm install --save-dev @playwright/test@1.63.0
+npx playwright test
+```
+
+This browser is available to processes inside Agent Devstation. If a project's tests run inside containers launched by DinD, install the browser in those project containers too; they do not share Agent Devstation's filesystem.
 
 ### Simple Codex CLI
 

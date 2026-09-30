@@ -1,6 +1,3 @@
-# Multi-platform index: BuildKit selects the client binaries for the target arch.
-FROM docker:29.8.1-cli@sha256:018edbc908e08fcc9dbf029c812c34251e9b4719e6f71ca0e5eae2a987d014ca AS docker-tools
-
 FROM ubuntu:26.04
 
 LABEL org.opencontainers.image.source="https://github.com/LucUrlings/agent-devstation"
@@ -15,6 +12,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     CARGO_HOME=/opt/sdk/rust/current \
     RUSTUP_HOME=/opt/sdk/rust/rustup \
     UV_PYTHON_INSTALL_DIR=/opt/sdk/python \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers \
     PATH=/opt/sdk/python/current/bin:/opt/sdk/node/current/bin:/opt/sdk/dotnet/current:/opt/sdk/java/current/bin:/opt/sdk/go/current/bin:/home/dev/go/bin:/opt/sdk/rust/current/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -24,12 +22,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && if id -u ubuntu >/dev/null 2>&1; then usermod -l dev -d /home/dev -m ubuntu && groupmod -n dev ubuntu; else useradd -m -u 1000 -s /bin/bash dev; fi \
     && mkdir -p /opt/sdk /home/dev/workspaces /home/dev/.codex /home/dev/.config /home/dev/.local \
     && chown -R dev:dev /home/dev
-
-# Client tools only; projects connect to a separately configured Docker daemon.
-# Keep plugins outside the persisted home volume so image updates replace them.
-COPY --from=docker-tools /usr/local/bin/docker /usr/local/bin/docker
-COPY --from=docker-tools /usr/local/libexec/docker/cli-plugins/ /usr/local/libexec/docker/cli-plugins/
-RUN docker --version && docker compose version && docker buildx version
 
 # GitHub's signed apt repository supplies the same gh command to all projects.
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
@@ -66,7 +58,7 @@ RUN curl -fsSL https://chatgpt.com/codex/install.sh -o /tmp/install-codex.sh \
     && echo "$installed" \
     && { [ "$CODEX_VERSION" = latest ] || [ "$installed" = "codex-cli $CODEX_VERSION" ]; }
 
-COPY scripts/entrypoint.sh scripts/install-sdks.sh scripts/install-editor.sh /usr/local/lib/agent-devstation/
+COPY scripts/entrypoint.sh scripts/install-sdks.sh scripts/install-editor.sh scripts/install-docker-cli.sh scripts/install-playwright-browser.sh /usr/local/lib/agent-devstation/
 COPY scripts/codex.sh /usr/local/bin/codex
 RUN chmod 0755 /usr/local/lib/agent-devstation/*.sh /usr/local/bin/codex && chown -R dev:dev /home/dev
 

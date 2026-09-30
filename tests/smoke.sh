@@ -6,11 +6,12 @@ name="devstation-smoke-$$"
 java_name="devstation-java-smoke-$$"
 cache_volume="devstation-cache-smoke-$$"
 codex_name="devstation-codex-smoke-$$"
+optional_name="devstation-optional-tools-smoke-$$"
 codex_volume="devstation-codex-home-smoke-$$"
 workspace_volume="devstation-workspace-smoke-$$"
 nested_workspace_volume="devstation-nested-workspace-smoke-$$"
 nested_home_volume="devstation-nested-home-smoke-$$"
-trap 'docker rm -f "$name" "$java_name" "$codex_name" >/dev/null 2>&1 || true; docker volume rm "$cache_volume" "$codex_volume" "$workspace_volume" "$nested_workspace_volume" "$nested_home_volume" >/dev/null 2>&1 || true' EXIT
+trap 'docker rm -f "$name" "$java_name" "$codex_name" "$optional_name" >/dev/null 2>&1 || true; docker volume rm "$cache_volume" "$codex_volume" "$workspace_volume" "$nested_workspace_volume" "$nested_home_volume" >/dev/null 2>&1 || true' EXIT
 trap 'echo "Smoke test failed at line $LINENO" >&2' ERR
 
 wait_for_editor() {
@@ -112,8 +113,8 @@ docker run --rm -e AGENT_DEVSTATION_UID=33 -e AGENT_DEVSTATION_GID=20 "$image" b
 docker run -d --name "$name" -e AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=false "$image" >/dev/null
 sleep 3
 docker exec -u dev "$name" bash -lc 'codex --version && claude --version && gh --version && ! command -v code-server'
-# Client tools must work as dev without a daemon or per-user plugin install.
-docker exec -u dev "$name" bash -lc 'docker --version && docker compose version && docker buildx version && ! command -v dockerd'
+# Optional tools are absent unless selected.
+docker exec -u dev "$name" bash -lc '! command -v docker && ! command -v dockerd && test ! -e /opt/playwright-browsers'
 docker exec -u dev "$name" bash -lc '
   set -euo pipefail
   codex login --help | grep -- "--device-auth" >/dev/null
@@ -258,3 +259,37 @@ docker rm -f "$name" >/dev/null
 docker run -d --name "$name" "$image" >/dev/null
 sleep 3
 docker exec -u dev "$name" bash -lc 'for sdk in python python3 pip3 node npm npx corepack dotnet java javac go gofmt rustc cargo rustup code-server; do ! command -v "$sdk" || exit 1; done; test ! -e /opt/code-server'
+
+# Selected tools install at startup and work as dev. A project-owned Playwright
+# package must be able to launch the shared Chromium binary.
+docker run -d --name "$optional_name" --shm-size=1g \
+  -e AGENT_DEVSTATION_SDK_NODE=24 \
+  -e AGENT_DEVSTATION_DOCKER_CLI_ENABLED=true \
+  -e AGENT_DEVSTATION_PLAYWRIGHT_CHROMIUM_ENABLED=true \
+  "$image" >/dev/null
+optional_ready=false
+for _ in $(seq 1 300); do
+  if docker logs "$optional_name" 2>&1 | grep '^Playwright Chromium 1.63.0 ready$' >/dev/null; then optional_ready=true; break; fi
+  if [[ $(docker inspect -f '{{.State.Running}}' "$optional_name") != true ]]; then docker logs "$optional_name"; exit 1; fi
+  sleep 2
+done
+[[ "$optional_ready" == true ]] || { docker logs "$optional_name"; exit 1; }
+docker exec -u dev "$optional_name" bash -lc \
+  'docker --version && docker compose version && docker buildx version && test "$PLAYWRIGHT_BROWSERS_PATH" = /opt/playwright-browsers && ! command -v playwright'
+docker exec -i -u dev "$optional_name" bash -s <<'SH'
+set -euo pipefail
+npm install --prefix /tmp/playwright-smoke --no-audit --no-fund playwright@1.63.0
+node <<'JS'
+const { chromium } = require('/tmp/playwright-smoke/node_modules/playwright');
+(async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  await page.setContent('<h1>Playwright Chromium ready</h1>');
+  if (await page.locator('h1').textContent() !== 'Playwright Chromium ready') throw new Error('Browser content mismatch');
+  await browser.close();
+})().catch(error => { console.error(error); process.exit(1); });
+JS
+SH
+docker exec -u root -e AGENT_DEVSTATION_DOCKER_CLI_ENABLED=false "$optional_name" /usr/local/lib/agent-devstation/install-docker-cli.sh
+docker exec -u root -e AGENT_DEVSTATION_PLAYWRIGHT_CHROMIUM_ENABLED=false "$optional_name" /usr/local/lib/agent-devstation/install-playwright-browser.sh
+docker exec -u dev "$optional_name" bash -lc '! command -v docker && test ! -e /opt/playwright-browsers'
