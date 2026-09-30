@@ -71,13 +71,24 @@ If it prints `/home/dev`, the sandbox prerequisite is ready. Run plain `codex` f
 
 ### bwrap loopback error
 
-If the sandbox check prints this error on an **Ubuntu 24.04 Docker host**:
+If the sandbox check prints this error on an **Ubuntu 24.04 or 26.04 Docker host**:
 
 ```text
 bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted
 ```
 
-First confirm that the full Compose example's `security_opt` lines are enabled and run `docker compose up -d` to recreate the container. Then copy and load Ubuntu's `bwrap` AppArmor profile **on the Docker host**:
+First confirm that the full Compose example's `security_opt` lines are enabled and run `docker compose up -d` to recreate the container. Check the sandbox again before changing the host.
+
+On **Ubuntu 26.04**, the `apparmor` package already provides `/etc/apparmor.d/bwrap-userns-restrict`. If the sandbox still fails, check and reload that profile **on the Docker host**:
+
+```sh
+ls -l /etc/apparmor.d/bwrap-userns-restrict
+sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
+```
+
+Do not copy the profile from `/usr/share/apparmor/extra-profiles/` on 26.04; it is not there. [Ubuntu's `apparmor` package file list](https://packages.ubuntu.com/resolute/amd64/apparmor/filelist) shows the installed path.
+
+On **Ubuntu 24.04**, if the profile does not already exist at `/etc/apparmor.d/bwrap-userns-restrict`, install, copy, and load it **on the Docker host**:
 
 ```sh
 sudo apt update
@@ -86,7 +97,7 @@ sudo install -m 0644 /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /e
 sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
 ```
 
-Run the sandbox check again; it should print `/home/dev`. The package step may report both packages already installed—still run the copy and parser commands. On Ubuntu 26.04, the profile ships with `apparmor` at `/etc/apparmor.d/bwrap-userns-restrict`; load it there if needed. Debian and Fedora may use different host rules. [OpenAI's Linux prerequisites](https://learn.chatgpt.com/docs/sandboxing?surface=cli#prerequisites) explain the host requirements. The image cannot override a host namespace restriction.
+If the profile already exists on 24.04, skip the copy and run only `sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict`. Run the sandbox check again; it should print `/home/dev`. Debian and Fedora may use different host rules. [OpenAI's Linux prerequisites](https://learn.chatgpt.com/docs/sandboxing?surface=cli#prerequisites) explain the host requirements. The image cannot override a host namespace restriction.
 
 To undo these Ubuntu 24.04 profile steps **if that profile file did not exist before you copied it**, remove the loaded profile first, then the file:
 

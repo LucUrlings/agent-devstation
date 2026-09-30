@@ -84,7 +84,7 @@ This enables the browser editor and Codex's Linux sandbox so you can use **eithe
    docker compose exec -u dev agent-devstation codex sandbox -c 'sandbox_mode="read-only"' /bin/sh -lc 'cd "$HOME" && pwd -P'
    ```
 
-   It should print `/home/dev`. For `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`, follow the [Ubuntu 24.04 host fix](docs/guide.md#bwrap-loopback-error). The image includes `bubblewrap`; the two `security_opt` settings relax Docker's seccomp and container AppArmor filters for this service.
+   It should print `/home/dev`. For `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`, follow the [Ubuntu 24.04 or 26.04 host instructions](docs/guide.md#bwrap-loopback-error). The image includes `bubblewrap`; the two `security_opt` settings relax Docker's seccomp and container AppArmor filters for this service.
 
 5. Run the phone commands for whichever agent you use. Codex starts its background server and pairs while signed in to the same ChatGPT account. Claude Code shows a URL or QR code; keep its command running while using it.
 
