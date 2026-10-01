@@ -27,6 +27,7 @@ To use a separately managed DinD sidecar with TLS, add these settings to Agent D
 
 ```yaml
 environment:
+  AGENT_DEVSTATION_DOCKER_CLI_ENABLED: "true"
   DOCKER_HOST: tcp://agent-devstation-docker:2376
   DOCKER_TLS_VERIFY: "1"
   DOCKER_CERT_PATH: /certs/client
