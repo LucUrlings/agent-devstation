@@ -55,6 +55,8 @@ Set `AGENT_DEVSTATION_PLAYWRIGHT_CHROMIUM_ENABLED=true` and select `AGENT_DEVSTA
 
 The image does not install a global Playwright package or CLI. Each project installs its own Playwright package, and it uses the shared browser through `PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers`. The default browser is for Playwright `1.63.0`; set `AGENT_DEVSTATION_PLAYWRIGHT_VERSION` to the exact version used by the project, then recreate Agent Devstation. Playwright requires a matching browser revision for each package version. [Playwright browser documentation](https://playwright.dev/docs/browsers).
 
+When the option is disabled, that path points to `/home/dev/.cache/ms-playwright`. Projects can install their own browsers there as `dev`; those downloads persist in the home volume. When enabled, a private installer package stays beside the shared browser to protect it from another project's browser cleanup. Startup checks the installed executable paths and reinstalls if any are missing.
+
 For example, in a project under `/home/dev/workspaces`:
 
 ```sh

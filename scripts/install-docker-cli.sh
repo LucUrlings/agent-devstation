@@ -13,6 +13,11 @@ unlink_tools() {
   rm -f /usr/local/bin/docker "$plugin_dir/docker-compose" "$plugin_dir/docker-buildx"
 }
 
+if [[ -e "$stage" || -L "$stage" ]]; then
+  echo 'Removing incomplete Docker CLI download'
+  rm -rf -- "$stage"
+fi
+
 if [[ "$enabled" == false ]]; then
   unlink_tools
   rm -rf -- "$root" "$stage"
