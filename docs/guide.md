@@ -58,6 +58,8 @@ The image does not install a global Playwright package or CLI. Each project inst
 
 When the option is disabled, that path points to `/home/dev/.cache/ms-playwright`. Projects can install their own browsers there as `dev`; those downloads persist in the home volume. When enabled, a private installer package stays beside the shared browser to protect it from another project's browser cleanup. Startup checks the installed executable paths and reinstalls if any are missing.
 
+Keep the container's `PLAYWRIGHT_BROWSERS_PATH` at `/opt/playwright-browsers` when shared Chromium is enabled. Startup rejects a different value because projects would otherwise search a cache where the shared browser was never installed. Disable the shared option if you want to manage a custom browser cache.
+
 For example, in a project under `/home/dev/workspaces`:
 
 ```sh

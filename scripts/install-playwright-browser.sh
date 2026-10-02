@@ -25,6 +25,10 @@ if [[ "$enabled" == false ]]; then
   exit 0
 fi
 
+[[ "${PLAYWRIGHT_BROWSERS_PATH-$root}" == "$root" ]] || {
+  echo 'PLAYWRIGHT_BROWSERS_PATH must be /opt/playwright-browsers when AGENT_DEVSTATION_PLAYWRIGHT_CHROMIUM_ENABLED=true; disable shared Chromium to manage a custom browser cache' >&2
+  exit 2
+}
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'AGENT_DEVSTATION_PLAYWRIGHT_VERSION must be an exact three-part version' >&2; exit 2; }
 command -v npm >/dev/null || { echo 'Playwright Chromium requires AGENT_DEVSTATION_SDK_NODE' >&2; exit 2; }
 

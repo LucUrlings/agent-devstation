@@ -170,6 +170,12 @@ if docker run --rm -e AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=true "$image" true 
   echo 'Editor started without a password unexpectedly' >&2
   exit 1
 fi
+if output=$(docker run --rm -e AGENT_DEVSTATION_PLAYWRIGHT_CHROMIUM_ENABLED=true \
+  -e PLAYWRIGHT_BROWSERS_PATH=/tmp/project-browsers "$image" true 2>&1); then
+  echo 'Shared Chromium accepted a conflicting browser cache unexpectedly' >&2
+  exit 1
+fi
+[[ "$output" == *'PLAYWRIGHT_BROWSERS_PATH must be /opt/playwright-browsers'* ]] || { echo "$output" >&2; exit 1; }
 
 # Temurin's range API can return 21.0.12.1 when asked for 21.0.12. Verify
 # that an exact selector picks the requested numeric release.
