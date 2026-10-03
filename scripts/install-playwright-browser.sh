@@ -49,6 +49,12 @@ rm -rf -- "$root" "$stage"
 mkdir -p "$root" "$stage/npm-cache"
 trap 'rm -rf -- "$stage"' EXIT
 echo "Installing Playwright Chromium for Playwright $version"
+# A stop during --with-deps can leave dpkg's journal or pending package
+# configuration behind. Resume it before Playwright invokes APT again.
+if ! dpkg --configure -a; then
+  apt-get update
+  apt-get install -y --fix-broken --no-remove --no-install-recommends
+fi
 # Keep the installer package at a stable, private path. Playwright registers
 # it as a browser user, so another project's cleanup cannot collect these
 # shared browsers. No command or package is installed globally.

@@ -309,7 +309,16 @@ docker exec -u root "$optional_name" bash -lc '
   binary=$(find /opt/playwright-browsers -type f -name chrome-headless-shell -print -quit)
   test -n "$binary"
   rm -- "$binary"
+  # Simulate the unfinished dpkg journal left by an interrupted dependency
+  # install, and confirm that APT really refuses to proceed before recovery.
+  touch /var/lib/dpkg/updates/0000
+  if apt-get install -y --no-install-recommends ca-certificates > /tmp/interrupted-apt.log 2>&1; then
+    echo "APT unexpectedly accepted an interrupted dpkg journal" >&2
+    exit 1
+  fi
+  grep -q "dpkg was interrupted" /tmp/interrupted-apt.log
   HOME=/root /usr/local/lib/agent-devstation/install-playwright-browser.sh
+  test ! -e /var/lib/dpkg/updates/0000
 '
 docker exec -i -u dev "$optional_name" bash -s < tests/playwright-functional.sh
 docker exec -u dev "$optional_name" bash -lc \
