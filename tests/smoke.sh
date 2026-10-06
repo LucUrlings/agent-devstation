@@ -6,11 +6,12 @@ name="devstation-smoke-$$"
 java_name="devstation-java-smoke-$$"
 cache_volume="devstation-cache-smoke-$$"
 codex_name="devstation-codex-smoke-$$"
+optional_name="devstation-optional-tools-smoke-$$"
 codex_volume="devstation-codex-home-smoke-$$"
 workspace_volume="devstation-workspace-smoke-$$"
 nested_workspace_volume="devstation-nested-workspace-smoke-$$"
 nested_home_volume="devstation-nested-home-smoke-$$"
-trap 'docker rm -f "$name" "$java_name" "$codex_name" >/dev/null 2>&1 || true; docker volume rm "$cache_volume" "$codex_volume" "$workspace_volume" "$nested_workspace_volume" "$nested_home_volume" >/dev/null 2>&1 || true' EXIT
+trap 'docker rm -f "$name" "$java_name" "$codex_name" "$optional_name" >/dev/null 2>&1 || true; docker volume rm "$cache_volume" "$codex_volume" "$workspace_volume" "$nested_workspace_volume" "$nested_home_volume" >/dev/null 2>&1 || true' EXIT
 trap 'echo "Smoke test failed at line $LINENO" >&2' ERR
 
 wait_for_editor() {
@@ -112,8 +113,11 @@ docker run --rm -e AGENT_DEVSTATION_UID=33 -e AGENT_DEVSTATION_GID=20 "$image" b
 docker run -d --name "$name" -e AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=false "$image" >/dev/null
 sleep 3
 docker exec -u dev "$name" bash -lc 'codex --version && claude --version && gh --version && ! command -v code-server'
-# Client tools must work as dev without a daemon or per-user plugin install.
-docker exec -u dev "$name" bash -lc 'docker --version && docker compose version && docker buildx version && ! command -v dockerd'
+# Optional tools are absent unless selected.
+docker exec -u dev "$name" bash -lc \
+  '! command -v docker && ! command -v dockerd && test -L /opt/playwright-browsers && test -w "$PLAYWRIGHT_BROWSERS_PATH" && touch "$PLAYWRIGHT_BROWSERS_PATH/project-cache-probe"'
+docker exec -u root "$name" /usr/local/lib/agent-devstation/install-playwright-browser.sh
+docker exec -u dev "$name" test -f /home/dev/.cache/ms-playwright/project-cache-probe
 docker exec -u dev "$name" bash -lc '
   set -euo pipefail
   codex login --help | grep -- "--device-auth" >/dev/null
@@ -166,6 +170,12 @@ if docker run --rm -e AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=true "$image" true 
   echo 'Editor started without a password unexpectedly' >&2
   exit 1
 fi
+if output=$(docker run --rm -e AGENT_DEVSTATION_PLAYWRIGHT_CHROMIUM_ENABLED=true \
+  -e PLAYWRIGHT_BROWSERS_PATH=/tmp/project-browsers "$image" true 2>&1); then
+  echo 'Shared Chromium accepted a conflicting browser cache unexpectedly' >&2
+  exit 1
+fi
+[[ "$output" == *'PLAYWRIGHT_BROWSERS_PATH must be /opt/playwright-browsers'* ]] || { echo "$output" >&2; exit 1; }
 
 # Temurin's range API can return 21.0.12.1 when asked for 21.0.12. Verify
 # that an exact selector picks the requested numeric release.
@@ -258,3 +268,62 @@ docker rm -f "$name" >/dev/null
 docker run -d --name "$name" "$image" >/dev/null
 sleep 3
 docker exec -u dev "$name" bash -lc 'for sdk in python python3 pip3 node npm npx corepack dotnet java javac go gofmt rustc cargo rustup code-server; do ! command -v "$sdk" || exit 1; done; test ! -e /opt/code-server'
+
+# Selected tools install at startup and work as dev. A project-owned Playwright
+# package must be able to launch the shared Chromium binary.
+docker run -d --name "$optional_name" --shm-size=1g \
+  -e AGENT_DEVSTATION_SDK_NODE=24 \
+  -e AGENT_DEVSTATION_DOCKER_CLI_ENABLED=true \
+  -e AGENT_DEVSTATION_PLAYWRIGHT_CHROMIUM_ENABLED=true \
+  "$image" >/dev/null
+optional_ready=false
+for _ in $(seq 1 300); do
+  if docker logs "$optional_name" 2>&1 | grep '^Playwright Chromium 1.63.0 ready$' >/dev/null; then optional_ready=true; break; fi
+  if [[ $(docker inspect -f '{{.State.Running}}' "$optional_name") != true ]]; then docker logs "$optional_name"; exit 1; fi
+  sleep 2
+done
+[[ "$optional_ready" == true ]] || { docker logs "$optional_name"; exit 1; }
+docker exec -u dev "$optional_name" bash -lc \
+  'docker --version && docker compose version && docker buildx version && test "$PLAYWRIGHT_BROWSERS_PATH" = /opt/playwright-browsers && ! command -v playwright && ! command -v playwright-core'
+docker exec -i -u dev "$optional_name" bash -s < tests/playwright-functional.sh
+
+# A restart reuses complete installations and clears interrupted downloads.
+docker exec -u root "$optional_name" mkdir -p /opt/.agent-devstation-docker-cli-staging /opt/.agent-devstation-playwright-staging
+before=$(docker logs "$optional_name" 2>&1 | grep -c '^Installing \(Docker CLI\|Playwright Chromium\) ')
+docker restart "$optional_name" >/dev/null
+reused=false
+for _ in $(seq 1 60); do
+  if docker logs "$optional_name" 2>&1 | grep '^Found Playwright Chromium .*; already installed$' >/dev/null; then reused=true; break; fi
+  if [[ $(docker inspect -f '{{.State.Running}}' "$optional_name") != true ]]; then docker logs "$optional_name"; exit 1; fi
+  sleep 2
+done
+[[ "$reused" == true ]] || { docker logs "$optional_name"; exit 1; }
+after=$(docker logs "$optional_name" 2>&1 | grep -c '^Installing \(Docker CLI\|Playwright Chromium\) ')
+[[ "$before" == "$after" ]] || { echo 'Restart downloaded optional tools again' >&2; exit 1; }
+docker exec -u dev "$optional_name" bash -lc \
+  'test ! -e /opt/.agent-devstation-docker-cli-staging && test ! -e /opt/.agent-devstation-playwright-staging'
+
+# The full browser remaining must not hide a missing headless shell.
+docker exec -u root "$optional_name" bash -lc '
+  set -euo pipefail
+  binary=$(find /opt/playwright-browsers -type f -name chrome-headless-shell -print -quit)
+  test -n "$binary"
+  rm -- "$binary"
+  # Simulate the unfinished dpkg journal left by an interrupted dependency
+  # install, and confirm that APT really refuses to proceed before recovery.
+  touch /var/lib/dpkg/updates/0000
+  if apt-get install -y --no-install-recommends ca-certificates > /tmp/interrupted-apt.log 2>&1; then
+    echo "APT unexpectedly accepted an interrupted dpkg journal" >&2
+    exit 1
+  fi
+  grep -q "dpkg was interrupted" /tmp/interrupted-apt.log
+  HOME=/root /usr/local/lib/agent-devstation/install-playwright-browser.sh
+  test ! -e /var/lib/dpkg/updates/0000
+'
+docker exec -i -u dev "$optional_name" bash -s < tests/playwright-functional.sh
+docker exec -u dev "$optional_name" bash -lc \
+  'mkdir -p /home/dev/.cache/ms-playwright && touch /home/dev/.cache/ms-playwright/project-cache-probe'
+docker exec -u root -e AGENT_DEVSTATION_DOCKER_CLI_ENABLED=false "$optional_name" /usr/local/lib/agent-devstation/install-docker-cli.sh
+docker exec -u root -e AGENT_DEVSTATION_PLAYWRIGHT_CHROMIUM_ENABLED=false "$optional_name" /usr/local/lib/agent-devstation/install-playwright-browser.sh
+docker exec -u dev "$optional_name" bash -lc \
+  '! command -v docker && test ! -e /opt/agent-devstation-docker-cli && test -L /opt/playwright-browsers && test -w "$PLAYWRIGHT_BROWSERS_PATH" && test -f "$PLAYWRIGHT_BROWSERS_PATH/project-cache-probe" && test ! -e "$PLAYWRIGHT_BROWSERS_PATH/.agent-devstation-installer"'

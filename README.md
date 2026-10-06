@@ -2,9 +2,9 @@
 
 # Agent Devstation
 
-A prebuilt Docker workspace for **Codex**, **Claude Code**, GitHub CLI, Docker CLI with Compose and Buildx, and optional SDKs and browser editing. Projects live under `/home/dev/workspaces`; the agents and editor share the same files and SDKs. Images support Linux AMD64 and ARM64. Neither setup needs a repository clone or image build.
+A prebuilt Docker workspace for **Codex**, **Claude Code**, GitHub CLI, and optional SDKs, Docker client tools, Playwright Chromium, and browser editing. Projects live under `/home/dev/workspaces`; the agents and editor share the same files and SDKs. Images support Linux AMD64 and ARM64. Neither setup needs a repository clone or image build.
 
-Docker commands require a separately configured daemon; the image includes client tools only. See [connecting to a development Docker daemon](docs/guide.md#docker-client-tools).
+Set `AGENT_DEVSTATION_DOCKER_CLI_ENABLED=true` to install Docker CLI, Compose, and Buildx at startup, then [connect to a development Docker daemon](docs/guide.md#docker-client-tools). Set `AGENT_DEVSTATION_PLAYWRIGHT_CHROMIUM_ENABLED=true` to [install a shared Chromium browser](docs/guide.md#playwright-chromium); each project supplies its own Playwright package. Both options are off by default and download only when selected.
 
 ## Simple setup: terminal agents
 
@@ -112,6 +112,8 @@ Use `docker compose exec -u dev -w /home/dev/workspaces/project agent-devstation
 | `AGENT_DEVSTATION_SDK_RUST` | `1.85` |
 
 Set versions in Compose (or use an ignored `.env` with the linked default Compose file). An empty value disables an SDK. A partial number selects the latest matching release at install time; an exact number such as `24.0.1` pins it. `.x` is not accepted. After editing Compose, run `docker compose up -d`: Compose recreates the container and startup installs selected SDKs and removes unselected ones. A normal restart reuses installed versions. [SDK details](docs/guide.md#sdk-selection).
+
+Optional tools use `AGENT_DEVSTATION_DOCKER_CLI_ENABLED=true` and `AGENT_DEVSTATION_PLAYWRIGHT_CHROMIUM_ENABLED=true`. Both default to false. Set `AGENT_DEVSTATION_PLAYWRIGHT_VERSION` to the exact Playwright version used by your project; its default is `1.63.0`.
 
 The linked Compose file leaves the editor off. To enable it there, set `AGENT_DEVSTATION_VSCODE_EDITOR_ENABLED=true`, set `AGENT_DEVSTATION_VSCODE_PASSWORD` in `.env`, and uncomment its loopback port mapping. Disabling it removes its installation. On Linux, set `AGENT_DEVSTATION_UID` and `AGENT_DEVSTATION_GID` to match your project files if they are not owned by `1000:1000`.
 
