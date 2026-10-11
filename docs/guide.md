@@ -13,6 +13,10 @@ Start with the [README](../README.md) and copy the complete [compose.yaml](../co
 
 Set `AGENT_DEVSTATION_TAG=nightly` in an optional `.env` to use a new merged change before the next release. `pull_policy: always` checks GHCR on every `docker compose up -d`. Release tags promote an already tested `main` image; they do not rebuild it. If an anonymous pull is denied, the GHCR package may need its visibility set to **Public**.
 
+Every full CI or nightly workflow checks the stable versions of Codex, Claude Code, GitHub CLI, and `uv`, then installs those exact versions on AMD64 and ARM64. Claude Code and GitHub CLI use the newest version available for both architectures in their signed stable APT repositories.
+
+Nightly publishing pulls the current Ubuntu 26.04 base and repeats package installation without using cached layers, applying available Ubuntu package upgrades. Pull-request builds can reuse cache. Nightly runs on a `main` push or a full workflow rerun; there is no scheduled updater. Releases continue promoting the tested nightly image.
+
 ## Compose and projects
 
 The linked [compose.yaml](../compose.yaml) is the complete one-file example. It mounts host `./workspaces` at `/home/dev/workspaces` inside the container and a named volume at `/home/dev` for logins and settings. This puts projects under the phone folder picker's starting home folder. Both agents and the optional editor see the same files and SDKs. `hostname` makes the shell prompt show `dev@agent-devspace`, while `container_name` names the Docker container `agent-devspace`. The Compose service remains `agent-devstation` for `docker compose exec`. A fixed container name allows only one instance with that name per Docker host; change or remove it for another instance. Do not use `docker compose down -v` unless you want to delete the home volume.
