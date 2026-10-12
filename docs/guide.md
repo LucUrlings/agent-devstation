@@ -15,7 +15,18 @@ Set `AGENT_DEVSTATION_TAG=nightly` in an optional `.env` to use a new merged cha
 
 Every full CI or nightly workflow checks the stable versions of Codex, Claude Code, GitHub CLI, and `uv`, then installs those exact versions on AMD64 and ARM64. Claude Code and GitHub CLI use the newest version available for both architectures in their signed stable APT repositories.
 
-Nightly publishing pulls the current Ubuntu 26.04 base and repeats package installation without using cached layers, applying available Ubuntu package upgrades. Pull-request builds can reuse cache. Nightly runs on a `main` push or a full workflow rerun; there is no scheduled updater. Releases continue promoting the tested nightly image.
+Nightly publishing pulls the current Ubuntu 26.04 base and repeats package installation without using cached layers, applying available Ubuntu package upgrades. Pull-request builds can reuse cache. Nightly runs on a `main` push, a manual run, or a full workflow rerun; there is no scheduled updater. Releases continue promoting the tested nightly image.
+
+To refresh packages without a code change, open **Actions → Publish nightly image → Run workflow** and select `main`. To retry release publishing, open **Publish release image → Run workflow**, select `main`, and enter an existing published full release tag such as `v0.1.0`. The release tag must point to a commit on `main` with a successful nightly image for both architectures; drafts and prereleases are rejected. Release publishing promotes that image to the version tag and `latest` without rebuilding it.
+
+The same manual runs are available through GitHub CLI:
+
+```bash
+gh workflow run publish-nightly.yml --ref main
+gh workflow run publish-release.yml --ref main -f tag=v0.1.0
+```
+
+Manual publishing runs are restricted to `main` and become available once these workflows are on the default branch. See [GitHub's manual workflow instructions](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
 
 ## Compose and projects
 

@@ -3,6 +3,7 @@ name: Publish nightly image
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,7 +21,7 @@ env:
 
 jobs:
   image-versions:
-    if: github.repository == 'LucUrlings/agent-devstation'
+    if: github.repository == 'LucUrlings/agent-devstation' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-26.04
     permissions:
       contents: read
@@ -37,7 +38,7 @@ jobs:
         run: bash scripts/resolve-image-versions.sh >> "$GITHUB_OUTPUT"
 
   build:
-    if: github.repository == 'LucUrlings/agent-devstation'
+    if: github.repository == 'LucUrlings/agent-devstation' && github.ref == 'refs/heads/main'
     needs: image-versions
     strategy:
       fail-fast: false
