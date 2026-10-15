@@ -10,7 +10,9 @@ python3 -c 'import ssl; print(ssl.OPENSSL_VERSION)'
 node -e 'if (process.arch !== "x64" && process.arch !== "arm64") process.exit(1)'
 npm --version
 npx --version
-corepack --version
+if command -v corepack >/dev/null 2>&1; then
+  corepack --version
+fi
 
 dotnet new console --output "$work/dotnet" --no-restore >/dev/null
 dotnet restore "$work/dotnet" --ignore-failed-sources >/dev/null

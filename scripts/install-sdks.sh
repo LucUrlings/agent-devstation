@@ -34,7 +34,8 @@ installed_version() {
   case "$name" in
     python) [[ -x "$sdk_root/python/current/bin/python3" && -x "$sdk_root/python/current/bin/pip3" ]] || return 1
       "$sdk_root/python/current/bin/python3" -c 'import platform; print(platform.python_version())' ;;
-    node) [[ -x "$sdk_root/node/current/bin/node" && -x "$sdk_root/node/current/bin/npm" && -x "$sdk_root/node/current/bin/npx" && -x "$sdk_root/node/current/bin/corepack" ]] || return 1
+    # Corepack is optional: official Node.js releases stopped bundling it in v25.
+    node) [[ -x "$sdk_root/node/current/bin/node" && -x "$sdk_root/node/current/bin/npm" && -x "$sdk_root/node/current/bin/npx" ]] || return 1
       "$sdk_root/node/current/bin/node" --version | sed 's/^v//' ;;
     dotnet) [[ -x "$sdk_root/dotnet/current/dotnet" ]] || return 1
       "$sdk_root/dotnet/current/dotnet" --version ;;
@@ -182,7 +183,10 @@ for name in python node dotnet java go rust; do
   fi
   echo "Installing $name $version"
   "install_$name" "$version"
-  current=$(installed_version "$name")
+  if ! current=$(installed_version "$name"); then
+    echo "Could not verify $name $version installation: required SDK commands are missing or unusable" >&2
+    exit 1
+  fi
   matches "$current" "$version" || { echo "$name installed $current, expected $version" >&2; exit 2; }
   touch "$complete_marker"
   echo "$name $current ready"

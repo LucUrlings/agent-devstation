@@ -34,18 +34,19 @@ wait_for_editor() {
 }
 
 wait_for_writable_node() {
+  local container_name=${1:-$name}
   for _ in $(seq 1 60); do
     # npm can run before the entrypoint finishes giving dev write access.
-    if docker exec -u dev "$name" bash -c 'npm --version >/dev/null && test -w /opt/sdk/node/current/bin && test -w /opt/sdk/node/current/lib/node_modules' >/dev/null 2>&1; then
+    if docker exec -u dev "$container_name" bash -c 'npm --version >/dev/null && npx --version >/dev/null && test -w /opt/sdk/node/current/bin && test -w /opt/sdk/node/current/lib/node_modules' >/dev/null 2>&1; then
       return 0
     fi
-    if [[ $(docker inspect -f '{{.State.Running}}' "$name") != true ]]; then
-      docker logs "$name"
+    if [[ $(docker inspect -f '{{.State.Running}}' "$container_name") != true ]]; then
+      docker logs "$container_name"
       return 1
     fi
     sleep 2
   done
-  docker logs "$name"
+  docker logs "$container_name"
   return 1
 }
 
@@ -270,9 +271,10 @@ sleep 3
 docker exec -u dev "$name" bash -lc 'for sdk in python python3 pip3 node npm npx corepack dotnet java javac go gofmt rustc cargo rustup code-server; do ! command -v "$sdk" || exit 1; done; test ! -e /opt/code-server'
 
 # Selected tools install at startup and work as dev. A project-owned Playwright
-# package must be able to launch the shared Chromium binary.
+# package must be able to launch the shared Chromium binary. Node 26 must start
+# successfully even though its official archive no longer includes Corepack.
 docker run -d --name "$optional_name" --shm-size=1g \
-  -e AGENT_DEVSTATION_SDK_NODE=24 \
+  -e AGENT_DEVSTATION_SDK_NODE=26 \
   -e AGENT_DEVSTATION_DOCKER_CLI_ENABLED=true \
   -e AGENT_DEVSTATION_PLAYWRIGHT_CHROMIUM_ENABLED=true \
   "$image" >/dev/null
@@ -283,13 +285,16 @@ for _ in $(seq 1 300); do
   sleep 2
 done
 [[ "$optional_ready" == true ]] || { docker logs "$optional_name"; exit 1; }
+wait_for_writable_node "$optional_name"
+docker exec -u dev "$optional_name" bash -lc \
+  'node --version | grep -q "^v26\." && test -f /opt/sdk/node/.agent-devstation-complete'
 docker exec -u dev "$optional_name" bash -lc \
   'docker --version && docker compose version && docker buildx version && test "$PLAYWRIGHT_BROWSERS_PATH" = /opt/playwright-browsers && ! command -v playwright && ! command -v playwright-core'
 docker exec -i -u dev "$optional_name" bash -s < tests/playwright-functional.sh
 
 # A restart reuses complete installations and clears interrupted downloads.
 docker exec -u root "$optional_name" mkdir -p /opt/.agent-devstation-docker-cli-staging /opt/.agent-devstation-playwright-staging
-before=$(docker logs "$optional_name" 2>&1 | grep -c '^Installing \(Docker CLI\|Playwright Chromium\) ')
+before=$(docker logs "$optional_name" 2>&1 | grep -c '^Installing \(node\|Docker CLI\|Playwright Chromium\) ')
 docker restart "$optional_name" >/dev/null
 reused=false
 for _ in $(seq 1 60); do
@@ -298,10 +303,18 @@ for _ in $(seq 1 60); do
   sleep 2
 done
 [[ "$reused" == true ]] || { docker logs "$optional_name"; exit 1; }
-after=$(docker logs "$optional_name" 2>&1 | grep -c '^Installing \(Docker CLI\|Playwright Chromium\) ')
-[[ "$before" == "$after" ]] || { echo 'Restart downloaded optional tools again' >&2; exit 1; }
+after=$(docker logs "$optional_name" 2>&1 | grep -c '^Installing \(node\|Docker CLI\|Playwright Chromium\) ')
+[[ "$before" == "$after" ]] || { echo 'Restart downloaded Node or optional tools again' >&2; exit 1; }
+docker logs "$optional_name" 2>&1 | grep '^Found node 26\..*; already installed$' >/dev/null
 docker exec -u dev "$optional_name" bash -lc \
   'test ! -e /opt/.agent-devstation-docker-cli-staging && test ! -e /opt/.agent-devstation-playwright-staging'
+
+# Optional Corepack must not weaken validation of required Node commands.
+# Losing npx still needs a fresh installation on the next startup.
+docker exec -u root "$optional_name" mv /opt/sdk/node/current/bin/npx /opt/sdk/node/current/bin/npx.incomplete
+docker restart "$optional_name" >/dev/null
+wait_for_writable_node "$optional_name"
+docker logs "$optional_name" 2>&1 | grep '^Removing incomplete node installation$' >/dev/null
 
 # The full browser remaining must not hide a missing headless shell.
 docker exec -u root "$optional_name" bash -lc '

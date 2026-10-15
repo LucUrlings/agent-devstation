@@ -149,6 +149,8 @@ Compose defaults to Python `3.14` and Node.js `24`; .NET, Java, Go, and Rust are
 
 Use numbers only: `24` follows the latest Node 24 release, `3.13` follows Python 3.13 patches, and `24.0.1` pins that exact Node release. `.x` is not accepted. Java also supports four-part versions; Rust `1` follows its stable channel. An unavailable version fails startup.
 
+Node installs include `node`, `npm`, and `npx`. [Node 25 and later no longer bundle Corepack](https://nodejs.org/en/blog/release/v25.0.0); install it separately if your project needs it.
+
 Run `docker compose up -d` after changing a selection. Compose recreates the container, then startup installs the selected SDKs under `/opt/sdk` and removes unselected ones. A normal restart reuses them. Startup logs say what was installed, reused, or removed. SDK commands and variables such as `JAVA_HOME` and `DOTNET_ROOT` work in agent shells and the editor terminal. Codex, Claude Code, and GitHub CLI are included independently of SDK choices.
 
 ## Authentication
